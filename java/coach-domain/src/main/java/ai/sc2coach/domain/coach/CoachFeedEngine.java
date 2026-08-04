@@ -11,70 +11,45 @@ import java.util.List;
 
 public final class CoachFeedEngine {
 
-    public CoachFeed build(
-            Match match,
-            MatchContext context,
-            List<TurningPoint> turningPoints,
-            List<Decision> decisions
-    ) {
+    public CoachFeed build(Match match, MatchContext context, List<TurningPoint> turningPoints, List<Decision> decisions) {
         var cards = new ArrayList<CoachFeed.Card>();
-
         turningPoints.stream().limit(2).forEach(point -> cards.add(new CoachFeed.Card(
-                point.at(),
-                CoachFeed.Kind.POOR,
-                point.severity() == TurningPoint.Severity.CRITICAL
-                        ? CoachFeed.Impact.GAME_CHANGING
-                        : CoachFeed.Impact.HIGH,
+                point.at(), CoachFeed.Kind.POOR,
+                point.severity() == TurningPoint.Severity.CRITICAL ? CoachFeed.Impact.GAME_CHANGING : CoachFeed.Impact.HIGH,
                 "Перелом в пользу " + safe(point.newLeaderName()),
                 "Измеренное преимущество изменилось на " + round(point.scoreSwing())
                         + ". Основной вклад: " + reasons(point.reasons()) + ".",
                 point.severity() == TurningPoint.Severity.CRITICAL ? 0.9 : 0.75
         )));
-
         decisions.stream()
                 .sorted(Comparator.comparingDouble((Decision d) -> d.confidence().value()).reversed())
-                .limit(3)
-                .map(this::card)
-                .forEach(cards::add);
-
-        cards.sort(Comparator
-                .comparingInt((CoachFeed.Card card) -> impactWeight(card.impact())).reversed()
+                .limit(3).map(this::card).forEach(cards::add);
+        cards.sort(Comparator.comparingInt((CoachFeed.Card card) -> impactWeight(card.impact())).reversed()
                 .thenComparing(CoachFeed.Card::at));
-
         String leader = context == null || context.summary().finalLeaderName() == null
-                ? "явный лидер не определён"
-                : context.summary().finalLeaderName();
-        String headline = "В финальном измеренном состоянии лидировал " + leader + ".";
-
+                ? "явный лидер не определён" : context.summary().finalLeaderName();
         List<String> recommendations = cards.stream()
                 .filter(card -> card.kind() == CoachFeed.Kind.POOR || card.kind() == CoachFeed.Kind.RISKY)
-                .map(this::recommendation)
-                .distinct()
-                .limit(3)
-                .toList();
+                .map(this::recommendation).distinct().limit(3).toList();
         if (recommendations.isEmpty()) {
             recommendations = List.of("Сверь ключевые переломы с таймлайном и проверь, можно ли было безопаснее сохранить преимущество.");
         }
-
-        return new CoachFeed(headline, cards.stream().limit(5).toList(), recommendations);
+        return new CoachFeed("В финальном измеренном состоянии лидировал " + leader + ".",
+                cards.stream().limit(5).toList(), recommendations);
     }
 
     private CoachFeed.Card card(Decision decision) {
         return switch (decision.type()) {
-            case REBUILD -> new CoachFeed.Card(decision.startedAt(), CoachFeed.Kind.GOOD,
-                    CoachFeed.Impact.MEDIUM, "Восстановление армии",
-                    "После потерь армия была восстановлена до рабочего уровня.", decision.confidence().value());
-            case ATTACK -> new CoachFeed.Card(decision.startedAt(), CoachFeed.Kind.RISKY,
-                    CoachFeed.Impact.HIGH, "Крупный боевой эпизод",
-                    "Атака сопровождалась заметным падением стоимости армии и ростом потерь.", decision.confidence().value());
-            case EXPAND -> new CoachFeed.Card(decision.startedAt(), CoachFeed.Kind.INFO,
-                    CoachFeed.Impact.MEDIUM, "Вероятное расширение",
-                    "Экономические показатели похожи на инвестицию в расширение. Это пока гипотеза.", decision.confidence().value());
-            case TECH_SWITCH -> new CoachFeed.Card(decision.startedAt(), CoachFeed.Kind.INFO,
-                    CoachFeed.Impact.MEDIUM, "Вероятный технологический переход",
-                    "Изменилась структура дохода в сторону газа. Это пока гипотеза.", decision.confidence().value());
-            default -> new CoachFeed.Card(decision.startedAt(), CoachFeed.Kind.INFO,
-                    CoachFeed.Impact.LOW, decision.type().name(), "Обнаружено решение игрока.", decision.confidence().value());
+            case REBUILD -> new CoachFeed.Card(decision.startedAt(), CoachFeed.Kind.GOOD, CoachFeed.Impact.MEDIUM,
+                    "Восстановление армии", "После потерь армия была восстановлена до рабочего уровня.", decision.confidence().value());
+            case ATTACK -> new CoachFeed.Card(decision.startedAt(), CoachFeed.Kind.RISKY, CoachFeed.Impact.HIGH,
+                    "Крупный боевой эпизод", "Атака сопровождалась заметным падением стоимости армии и ростом потерь.", decision.confidence().value());
+            case EXPAND -> new CoachFeed.Card(decision.startedAt(), CoachFeed.Kind.INFO, CoachFeed.Impact.MEDIUM,
+                    "Вероятное расширение", "Экономические показатели похожи на инвестицию в расширение. Это пока гипотеза.", decision.confidence().value());
+            case TECH_SWITCH -> new CoachFeed.Card(decision.startedAt(), CoachFeed.Kind.INFO, CoachFeed.Impact.MEDIUM,
+                    "Вероятный технологический переход", "Изменилась структура дохода в сторону газа. Это пока гипотеза.", decision.confidence().value());
+            default -> new CoachFeed.Card(decision.startedAt(), CoachFeed.Kind.INFO, CoachFeed.Impact.LOW,
+                    decision.type().name(), "Обнаружено решение игрока.", decision.confidence().value());
         };
     }
 
@@ -88,9 +63,19 @@ public final class CoachFeedEngine {
     private String reasons(List<TurningPoint.Reason> reasons) {
         if (reasons == null || reasons.isEmpty()) return "совокупное изменение показателей";
         return reasons.stream().limit(2)
-                .map(reason -> reason.component().toLowerCase() + " " + signed(reason.change()))
+                .map(reason -> componentName(reason.component()) + " " + signed(reason.change()))
                 .reduce((left, right) -> left + ", " + right)
                 .orElse("совокупное изменение показателей");
+    }
+
+    private static String componentName(String component) {
+        if (component == null) return "показатель";
+        return switch (component.toLowerCase()) {
+            case "army" -> "армия";
+            case "economy" -> "экономика";
+            case "supply" -> "снабжение";
+            default -> component.toLowerCase();
+        };
     }
 
     private static int impactWeight(CoachFeed.Impact impact) {
