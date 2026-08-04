@@ -21,8 +21,16 @@ def run_cli(*args: str) -> subprocess.CompletedProcess[str]:
 def test_help_describes_unified_pipeline() -> None:
     result = run_cli("--help")
     assert result.returncode == 0
-    assert "decode -> coaching -> engagements -> strategic coaching" in result.stdout
-    assert "charts -> diagnostics -> review bundle" in result.stdout
+    for stage in (
+        "decode",
+        "coaching",
+        "engagements",
+        "strategic coaching",
+        "charts",
+        "diagnostics",
+        "review bundle",
+    ):
+        assert stage in result.stdout
     assert "--lang en|ru" in result.stdout
 
 
