@@ -1,0 +1,27 @@
+name: java
+
+on:
+  pull_request:
+    paths:
+      - 'java/**'
+      - 'contracts/**'
+      - '.github/workflows/java.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'java/**'
+      - 'contracts/**'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+      - name: Test Java modules
+        working-directory: java
+        run: mvn --batch-mode --no-transfer-progress verify
