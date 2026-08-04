@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sc2coach.ai/contracts/replay-analysis.schema.json",
+  "title": "SC2 Coach replay analysis",
+  "type": "object",
+  "required": ["schema_version", "replay", "players", "timeline"],
+  "properties": {
+    "schema_version": {"type": "string", "minLength": 1},
+    "source": {"type": ["string", "null"]},
+    "focus_player": {"type": ["string", "null"]},
+    "replay": {
+      "type": "object",
+      "required": ["map", "game_seconds"],
+      "properties": {
+        "map": {"type": ["string", "null"]},
+        "release": {"type": ["string", "null"]},
+        "base_build": {"type": ["integer", "null"]},
+        "type": {"type": ["string", "null"]},
+        "game_seconds": {"type": ["number", "null"]},
+        "winner": {"type": "array", "items": {"type": "string"}}
+      },
+      "additionalProperties": true
+    },
+    "players": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["pid", "name", "race", "stats"],
+        "properties": {
+          "pid": {"type": "integer"},
+          "name": {"type": "string"},
+          "race": {"type": "string"},
+          "team": {"type": ["integer", "null"]},
+          "result": {"type": ["string", "null"]},
+          "mmr": {"type": ["integer", "null"]},
+          "apm": {"type": ["number", "null"]},
+          "stats": {"type": "array", "items": {"type": "object"}}
+        },
+        "additionalProperties": true
+      }
+    },
+    "timeline": {"type": "array", "items": {"type": "object"}}
+  },
+  "additionalProperties": true
+}
