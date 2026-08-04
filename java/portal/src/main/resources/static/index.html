@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>SC2 Coach</title>
+  <style>
+    :root{font-family:Inter,system-ui,sans-serif;color:#e8eef8;background:#07111f}
+    body{margin:0;background:radial-gradient(circle at top,#142b49 0,#07111f 55%);min-height:100vh}
+    main{max-width:1040px;margin:auto;padding:48px 20px 80px}
+    h1{font-size:clamp(38px,7vw,76px);margin:0 0 8px;letter-spacing:-.05em}
+    p{color:#aebbd0}.card{background:#0d1a2bda;border:1px solid #263a56;border-radius:18px;padding:22px;margin-top:24px;box-shadow:0 18px 60px #0008}
+    form{display:flex;gap:12px;flex-wrap:wrap;align-items:center}input{flex:1;min-width:260px;padding:14px;background:#07111f;border:1px solid #385273;border-radius:10px;color:#fff}
+    button{padding:14px 20px;border:0;border-radius:10px;background:#66d9ff;color:#00121d;font-weight:800;cursor:pointer}button:disabled{opacity:.5}
+    table{width:100%;border-collapse:collapse;margin-top:14px}th,td{text-align:left;padding:12px;border-bottom:1px solid #263a56}th{color:#8fa5c2}
+    .metric{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px}.metric div{background:#07111f;border-radius:12px;padding:14px}
+    .score{font-size:28px;font-weight:800}.hidden{display:none}.error{color:#ff9b9b}.actions{display:flex;gap:10px;margin-top:16px}
+  </style>
+</head>
+<body><main>
+  <h1>SC2 Coach</h1>
+  <p>Загрузите replay StarCraft II. Файл анализируется во временной директории и удаляется после ответа.</p>
+  <section class="card"><form id="uploadForm">
+    <input id="replay" name="replay" type="file" accept=".SC2Replay" required>
+    <button id="submit" type="submit">Анализировать</button>
+  </form><p id="status"></p></section>
+  <section id="result" class="card hidden">
+    <h2 id="title"></h2><div id="summary" class="metric"></div>
+    <h3>Сравнение игроков</h3><table><thead><tr><th>#</th><th>Игрок</th><th>Раса</th><th>Итог</th><th>Экономика</th><th>Армия</th><th>Эффективность</th></tr></thead><tbody id="ranking"></tbody></table>
+    <div class="actions"><button id="download" type="button">Скачать JSON</button></div>
+  </section>
+<script>
+let latest=null;
+const form=document.querySelector('#uploadForm'), status=document.querySelector('#status'), submit=document.querySelector('#submit');
+form.addEventListener('submit',async e=>{e.preventDefault();status.className='';status.textContent='Идёт анализ…';submit.disabled=true;document.querySelector('#result').classList.add('hidden');
+ try{const data=new FormData(form);const r=await fetch('/api/v1/analyses',{method:'POST',body:data});if(!r.ok){const p=await r.json().catch(()=>({detail:'Ошибка анализа'}));throw new Error(p.detail||'Ошибка анализа')};latest=await r.json();render(latest);status.textContent='Готово';}
+ catch(err){status.className='error';status.textContent=err.message}finally{submit.disabled=false}});
+function render(a){document.querySelector('#title').textContent=a.map||'Матч';const c=a.comparison||{};document.querySelector('#summary').innerHTML=`<div><span>Длительность</span><div class="score">${formatTime(a.gameSeconds)}</div></div><div><span>Лидер</span><div class="score">${c.leader||'—'}</div></div><div><span>Разрыв</span><div class="score">${c.gapToSecond??0}</div></div><div><span>Уверенность</span><div class="score">${c.confidence||'—'}</div></div>`;
+ document.querySelector('#ranking').innerHTML=(c.ranking||[]).map((p,i)=>`<tr><td>${i+1}</td><td>${esc(p.name)}</td><td>${esc(p.race)}</td><td><b>${p.score}</b></td><td>${p.economy}</td><td>${p.army}</td><td>${p.efficiency}</td></tr>`).join('');document.querySelector('#result').classList.remove('hidden')}
+function formatTime(s){s=Math.round(s||0);return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`}
+function esc(v){return String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
+document.querySelector('#download').addEventListener('click',()=>{if(!latest)return;const blob=new Blob([JSON.stringify(latest,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='sc2-coach-analysis.json';a.click();URL.revokeObjectURL(a.href)});
+</script></main></body></html>
