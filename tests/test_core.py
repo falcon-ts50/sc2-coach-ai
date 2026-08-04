@@ -1,4 +1,5 @@
 from analyze import clock, json_safe, normalize_entity_name, seconds_from_frame
+from battles import classify_trade, cluster_deaths
 from coach import find_turning_points, intervals
 
 
@@ -8,9 +9,7 @@ def test_game_time_uses_replay_frames() -> None:
 
 
 def test_tuple_keys_are_json_safe() -> None:
-    assert json_safe({("SCV", 79): {("x", "y"): 1}}) == {
-        "(SCV,79)": {"(x,y)": 1}
-    }
+    assert json_safe({("SCV", 79): {("x", "y"): 1}}) == {"(SCV,79)": {"(x,y)": 1}}
 
 
 def test_entity_names_are_normalized() -> None:
@@ -35,3 +34,17 @@ def test_turning_point_detection() -> None:
     ]
     points = find_turning_points(rows, 1)
     assert points[0]["type"] == "army_lead_lost"
+
+
+def test_deaths_are_clustered_into_battle_windows() -> None:
+    events = [{"time": 100}, {"time": 108}, {"time": 117}, {"time": 160}]
+    windows = cluster_deaths(events, max_gap=18, padding=8, minimum_deaths=3)
+    assert len(windows) == 1
+    assert windows[0][0] == 92
+    assert windows[0][1] == 125
+
+
+def test_trade_classification_uses_focus_team_perspective() -> None:
+    assert classify_trade({"1": 2500, "2": 600}, "1") == "catastrophic_loss"
+    assert classify_trade({"1": 500, "2": 2200}, "1") == "decisive_win"
+    assert classify_trade({"1": 1000, "2": 900}, "1") == "even"
