@@ -1,6 +1,14 @@
+FROM node:24-alpine AS frontend-build
+WORKDIR /src/frontend
+COPY frontend/package.json ./
+RUN npm install
+COPY frontend ./
+RUN npm run build
+
 FROM maven:3.9-eclipse-temurin-25 AS java-build
 WORKDIR /src
 COPY java ./java
+COPY --from=frontend-build /src/frontend/dist ./java/portal/src/main/resources/static
 RUN cd java && mvn --batch-mode --no-transfer-progress -DskipTests package
 
 FROM eclipse-temurin:25-jre
