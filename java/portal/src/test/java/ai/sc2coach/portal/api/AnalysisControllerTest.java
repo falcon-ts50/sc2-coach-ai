@@ -2,12 +2,13 @@ package ai.sc2coach.portal.api;
 
 import ai.sc2coach.portal.analysis.AnalysisResponse;
 import ai.sc2coach.portal.analysis.AnalysisService;
+import ai.sc2coach.portal.analysis.MatchComparison;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.mock.web.MockMultipartFile;
 
 import java.util.List;
 
@@ -28,9 +29,12 @@ class AnalysisControllerTest {
 
     @Test
     void returnsDecodedReplaySummary() throws Exception {
+        var score = new MatchComparison.PlayerScore("Alpha", "Terran", 1, 72.0, 70.0, 80.0, 68.0, 60.0);
+        var comparison = new MatchComparison.Result("Alpha", 8.0, "medium", List.of(score));
         given(analysisService.analyze(any())).willReturn(new AnalysisResponse(
                 "0.1.0", "Test Map", 120.0,
-                List.of(new AnalysisResponse.PlayerSummary(1, "Alpha", "Terran", 1, "Win", 3500, 100.0))
+                List.of(new AnalysisResponse.PlayerSummary(1, "Alpha", "Terran", 1, "Win", 3500, 100.0)),
+                comparison
         ));
         MockMultipartFile replay = new MockMultipartFile(
                 "replay", "match.SC2Replay", "application/octet-stream", new byte[]{1}
@@ -39,6 +43,7 @@ class AnalysisControllerTest {
         mockMvc.perform(multipart("/api/v1/analyses").file(replay))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.map").value("Test Map"))
-                .andExpect(jsonPath("$.players[0].name").value("Alpha"));
+                .andExpect(jsonPath("$.players[0].name").value("Alpha"))
+                .andExpect(jsonPath("$.comparison.leader").value("Alpha"));
     }
 }
