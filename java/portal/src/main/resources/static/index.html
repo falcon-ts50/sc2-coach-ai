@@ -13,8 +13,9 @@
     form{display:flex;gap:12px;flex-wrap:wrap;align-items:center}input{flex:1;min-width:260px;padding:14px;background:#07111f;border:1px solid #385273;border-radius:10px;color:#fff}
     button{padding:14px 20px;border:0;border-radius:10px;background:#66d9ff;color:#00121d;font-weight:800;cursor:pointer}button:disabled{opacity:.5}
     table{width:100%;border-collapse:collapse;margin-top:14px}th,td{text-align:left;padding:12px;border-bottom:1px solid #263a56}th{color:#8fa5c2}
-    .metric{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px}.metric div{background:#07111f;border-radius:12px;padding:14px}
+    .metric{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px}.metric div,.segment{background:#07111f;border-radius:12px;padding:14px}
     .score{font-size:28px;font-weight:800}.hidden{display:none}.error{color:#ff9b9b}.actions{display:flex;gap:10px;margin-top:16px}
+    .segments{display:grid;gap:10px}.segment strong{display:block;margin-bottom:4px}.muted{color:#8fa5c2}
   </style>
 </head>
 <body><main>
@@ -26,6 +27,7 @@
   </form><p id="status"></p></section>
   <section id="result" class="card hidden">
     <h2 id="title"></h2><div id="summary" class="metric"></div>
+    <h3>История преимущества</h3><div id="leadHistory" class="segments"></div>
     <h3>Сравнение игроков</h3><table><thead><tr><th>#</th><th>Игрок</th><th>Раса</th><th>Итог</th><th>Экономика</th><th>Армия</th><th>Эффективность</th></tr></thead><tbody id="ranking"></tbody></table>
     <div class="actions"><button id="download" type="button">Скачать JSON</button></div>
   </section>
@@ -35,9 +37,12 @@ const form=document.querySelector('#uploadForm'), status=document.querySelector(
 form.addEventListener('submit',async e=>{e.preventDefault();status.className='';status.textContent='Идёт анализ…';submit.disabled=true;document.querySelector('#result').classList.add('hidden');
  try{const data=new FormData(form);const r=await fetch('/api/v1/analyses',{method:'POST',body:data});if(!r.ok){const p=await r.json().catch(()=>({detail:'Ошибка анализа'}));throw new Error(p.detail||'Ошибка анализа')};latest=await r.json();render(latest);status.textContent='Готово';}
  catch(err){status.className='error';status.textContent=err.message}finally{submit.disabled=false}});
-function render(a){document.querySelector('#title').textContent=a.map||'Матч';const c=a.comparison||{};document.querySelector('#summary').innerHTML=`<div><span>Длительность</span><div class="score">${formatTime(a.gameSeconds)}</div></div><div><span>Лидер</span><div class="score">${c.leader||'—'}</div></div><div><span>Разрыв</span><div class="score">${c.gapToSecond??0}</div></div><div><span>Уверенность</span><div class="score">${c.confidence||'—'}</div></div>`;
+function render(a){document.querySelector('#title').textContent=a.map||'Матч';const c=a.comparison||{},m=a.matchContext?.summary||{};document.querySelector('#summary').innerHTML=`<div><span>Длительность</span><div class="score">${formatTime(a.gameSeconds)}</div></div><div><span>Лидер в конце</span><div class="score">${esc(m.finalLeaderName||c.leader||'—')}</div></div><div><span>Разрыв</span><div class="score">${round(m.finalGap??c.gapToSecond??0)}</div></div><div><span>Уверенность</span><div class="score">${esc(m.confidence||c.confidence||'—')}</div></div>`;
+ const history=m.leadHistory||[];document.querySelector('#leadHistory').innerHTML=history.length?history.map(s=>`<div class="segment"><strong>${esc(s.leaderName||'Без явного лидера')}</strong><span class="muted">${formatDuration(s.from)}–${formatDuration(s.to)} · средний разрыв ${round(s.averageGap)}</span></div>`).join(''):'<p class="muted">Недостаточно временных данных для истории преимущества.</p>';
  document.querySelector('#ranking').innerHTML=(c.ranking||[]).map((p,i)=>`<tr><td>${i+1}</td><td>${esc(p.name)}</td><td>${esc(p.race)}</td><td><b>${p.score}</b></td><td>${p.economy}</td><td>${p.army}</td><td>${p.efficiency}</td></tr>`).join('');document.querySelector('#result').classList.remove('hidden')}
 function formatTime(s){s=Math.round(s||0);return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`}
+function formatDuration(v){if(!v)return'0:00';const match=String(v).match(/^PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?$/);if(!match)return esc(v);return formatTime((Number(match[1]||0)*3600)+(Number(match[2]||0)*60)+Number(match[3]||0))}
+function round(v){return Math.round(Number(v||0)*10)/10}
 function esc(v){return String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
 document.querySelector('#download').addEventListener('click',()=>{if(!latest)return;const blob=new Blob([JSON.stringify(latest,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='sc2-coach-analysis.json';a.click();URL.revokeObjectURL(a.href)});
 </script></main></body></html>
