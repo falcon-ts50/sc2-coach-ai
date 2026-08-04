@@ -11,7 +11,8 @@ The project is currently at `v0.3`:
 - produces machine-readable JSON and Markdown;
 - generates coaching metrics for army value, losses, workers, resource float, supply blocks and turning points;
 - generates PNG charts for army value, workers, bank, collection rate and cumulative army losses;
-- detects battle windows from clustered unit deaths, estimates trade losses from player-stat deltas and annotates charts with battle intervals.
+- classifies engagements as battles, skirmishes, worker harassment, base assaults or minor contacts;
+- produces diagnostics and a single review ZIP containing all reports and charts.
 
 The replay is processed locally and is not uploaded anywhere.
 
@@ -22,23 +23,58 @@ Requirements:
 - Python 3.11+
 - Internet access for the initial dependency installation
 
-```bash
-chmod +x run.sh run_coach.sh
+Make the unified command executable once:
 
-./run.sh match.SC2Replay \
+```bash
+chmod +x sc2-coach
+```
+
+Run the complete pipeline with one command:
+
+```bash
+./sc2-coach match.SC2Replay \
   --player dragonDriver \
   --out ./results/match
 ```
 
-Generate coaching metrics, battle analysis and charts:
+This performs:
+
+```text
+decode
+  -> coaching analysis
+  -> engagement analysis
+  -> charts
+  -> diagnostics
+  -> review bundle
+```
+
+The main file to share for review is:
+
+```text
+results/match/sc2_coach_review_bundle.zip
+```
+
+When `--out` is omitted, the command creates a directory under `results/` using the replay filename:
 
 ```bash
-./run_coach.sh ./results/match/replay_analysis.json \
+./sc2-coach match.SC2Replay --player dragonDriver
+```
+
+### Low-level commands
+
+The two-stage interface remains available for debugging and development:
+
+```bash
+sh run.sh match.SC2Replay \
+  --player dragonDriver \
+  --out ./results/match
+
+sh run_coach.sh ./results/match/replay_analysis.json \
   --player dragonDriver \
   --out ./results/match
 ```
 
-Outputs:
+## Outputs
 
 ```text
 results/match/replay_analysis.json
@@ -47,6 +83,10 @@ results/match/coaching_analysis.json
 results/match/coaching_report.md
 results/match/battle_analysis.json
 results/match/battle_report.md
+results/match/review_summary.md
+results/match/diagnostics.json
+results/match/manifest.json
+results/match/sc2_coach_review_bundle.zip
 results/match/charts/army_value.png
 results/match/charts/workers.png
 results/match/charts/bank.png
@@ -54,7 +94,7 @@ results/match/charts/income_rate.png
 results/match/charts/army_losses.png
 ```
 
-Battle windows are inferred from death-event clusters. Resource trade values are estimates derived from cumulative army-loss deltas in the nearest `PlayerStatsEvent` snapshots.
+Engagement windows are inferred from death-event clusters. Resource trade values are estimates derived from cumulative army-loss deltas in the nearest `PlayerStatsEvent` snapshots.
 
 ## Time model
 
@@ -77,7 +117,7 @@ python -m pytest -q
 
 - `v0.1`: stable decoder and versioned replay JSON
 - `v0.2`: economy, army and worker charts
-- `v0.3`: automatic battle and turning-point detection
+- `v0.3`: automatic engagement and turning-point detection
 - `v0.4`: coaching rules for macro, scouting, composition and teamwork
 - `v0.5`: build-order comparison against reference replays
 - `v0.6`: polished HTML/PDF reports
