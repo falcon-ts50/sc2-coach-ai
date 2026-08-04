@@ -36,12 +36,33 @@ def test_turning_point_detection() -> None:
     assert points[0]["type"] == "army_lead_lost"
 
 
+def death(time: float, unit: str = "Marine", victim: str = "Player") -> dict:
+    return {"time": time, "unit": unit, "victim": victim}
+
+
 def test_deaths_are_clustered_into_battle_windows() -> None:
-    events = [{"time": 100}, {"time": 108}, {"time": 117}, {"time": 160}]
+    events = [death(100), death(108, "Marauder"), death(117, "Viking"), death(160)]
     windows = cluster_deaths(events, max_gap=18, padding=8, minimum_deaths=3)
     assert len(windows) == 1
     assert windows[0][0] == 92
     assert windows[0][1] == 125
+
+
+def test_non_combat_entities_do_not_create_battles() -> None:
+    events = [death(10, "Larva"), death(15, "MULE"), death(20, "MineralField750", "None")]
+    assert cluster_deaths(events) == []
+
+
+def test_long_continuous_fighting_is_split() -> None:
+    events = [death(time, "Marine" if index % 2 == 0 else "Zergling") for index, time in enumerate(range(0, 241, 10))]
+    windows = cluster_deaths(events, max_gap=14, padding=0, minimum_deaths=3, max_duration=95)
+    assert len(windows) == 3
+    assert all(end - start <= 95 for start, end, _ in windows)
+
+
+def test_worker_harass_requires_multiple_worker_deaths() -> None:
+    assert cluster_deaths([death(10, "SCV"), death(15, "SCV")]) == []
+    assert len(cluster_deaths([death(10, "SCV"), death(15, "SCV"), death(20, "SCV")])) == 1
 
 
 def test_trade_classification_uses_focus_team_perspective() -> None:
