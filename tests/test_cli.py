@@ -21,7 +21,9 @@ def run_cli(*args: str) -> subprocess.CompletedProcess[str]:
 def test_help_describes_unified_pipeline() -> None:
     result = run_cli("--help")
     assert result.returncode == 0
-    assert "decode -> coaching -> engagements -> charts -> diagnostics -> review bundle" in result.stdout
+    assert "decode -> coaching -> engagements -> strategic coaching" in result.stdout
+    assert "charts -> diagnostics -> review bundle" in result.stdout
+    assert "--lang en|ru" in result.stdout
 
 
 def test_missing_replay_fails_cleanly() -> None:
