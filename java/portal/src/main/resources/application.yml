@@ -1,0 +1,17 @@
+spring:
+  servlet:
+    multipart:
+      max-file-size: 25MB
+      max-request-size: 25MB
+
+sc2coach:
+  analysis:
+    python-executable: ${SC2_COACH_PYTHON:python3}
+    decoder-script: ${SC2_COACH_DECODER_SCRIPT:../analyze.py}
+    timeout: ${SC2_COACH_DECODER_TIMEOUT:2m}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
