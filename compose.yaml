@@ -1,0 +1,12 @@
+services:
+  sc2-coach:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      JAVA_OPTS: "-XX:MaxRAMPercentage=70 -XX:+ExitOnOutOfMemoryError"
+    deploy:
+      resources:
+        limits:
+          memory: 1G
