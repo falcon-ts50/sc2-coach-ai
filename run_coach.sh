@@ -36,14 +36,17 @@ case "$LANGUAGE" in en|ru) ;; *) echo "--lang must be en or ru" >&2; exit 2 ;; e
   --lang "$LANGUAGE"
 "$VENV/bin/python" "$ROOT_DIR/charts.py" "$INPUT_JSON" --battles "$OUT_DIR/battle_analysis.json" --out "$OUT_DIR"
 
-# First pass creates diagnostics consumed by the localized summary.
+# First pass creates diagnostics consumed by the localized summary and PDF.
 "$VENV/bin/python" "$ROOT_DIR/review_bundle.py" "$INPUT_JSON" --out "$OUT_DIR" >/dev/null
 "$VENV/bin/python" "$ROOT_DIR/report_i18n.py" --replay "$INPUT_JSON" --out "$OUT_DIR" --lang "$LANGUAGE"
-# Rebuild the ZIP with localized Markdown files.
+"$VENV/bin/python" "$ROOT_DIR/pdf_report.py" "$INPUT_JSON" --out "$OUT_DIR" --lang "$LANGUAGE" >/dev/null
+# Rebuild the ZIP with localized Markdown and the final PDF.
 "$VENV/bin/python" "$ROOT_DIR/review_bundle.py" "$INPUT_JSON" --out "$OUT_DIR" >/dev/null
 
 if [ "$LANGUAGE" = "ru" ]; then
+  echo "PDF-отчёт: $OUT_DIR/sc2_coach_report.pdf"
   echo "Бандл для проверки: $OUT_DIR/sc2_coach_review_bundle.zip"
 else
+  echo "PDF report: $OUT_DIR/sc2_coach_report.pdf"
   echo "Review bundle: $OUT_DIR/sc2_coach_review_bundle.zip"
 fi
