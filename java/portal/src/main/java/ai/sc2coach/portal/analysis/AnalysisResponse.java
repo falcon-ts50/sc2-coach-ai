@@ -1,6 +1,7 @@
 package ai.sc2coach.portal.analysis;
 
 import ai.sc2coach.domain.ReplayAnalysis;
+import ai.sc2coach.domain.coach.CoachFeed;
 import ai.sc2coach.domain.context.MatchContext;
 import ai.sc2coach.domain.context.TurningPoint;
 
@@ -13,7 +14,8 @@ public record AnalysisResponse(
         List<PlayerSummary> players,
         MatchComparison.Result comparison,
         MatchContext matchContext,
-        List<TurningPoint> turningPoints
+        List<TurningPoint> turningPoints,
+        CoachFeed coachFeed
 ) {
     public AnalysisResponse {
         players = List.copyOf(players);
@@ -23,7 +25,8 @@ public record AnalysisResponse(
     public static AnalysisResponse from(
             ReplayAnalysis analysis,
             MatchContext matchContext,
-            List<TurningPoint> turningPoints
+            List<TurningPoint> turningPoints,
+            CoachFeed coachFeed
     ) {
         return new AnalysisResponse(
                 analysis.schemaVersion(),
@@ -32,7 +35,8 @@ public record AnalysisResponse(
                 analysis.players().stream().map(PlayerSummary::from).toList(),
                 MatchComparison.compare(analysis),
                 matchContext,
-                turningPoints
+                turningPoints,
+                coachFeed
         );
     }
 
