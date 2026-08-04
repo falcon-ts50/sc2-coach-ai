@@ -3,6 +3,7 @@ package ai.sc2coach.domain.coach;
 import ai.sc2coach.domain.context.MatchContext;
 import ai.sc2coach.domain.context.TurningPoint;
 import ai.sc2coach.domain.decision.Decision;
+import ai.sc2coach.domain.knowledge.Recommendation;
 import ai.sc2coach.domain.model.Match;
 
 import java.util.ArrayList;
@@ -12,6 +13,16 @@ import java.util.List;
 public final class CoachFeedEngine {
 
     public CoachFeed build(Match match, MatchContext context, List<TurningPoint> turningPoints, List<Decision> decisions) {
+        return build(match, context, turningPoints, decisions, List.of());
+    }
+
+    public CoachFeed build(
+            Match match,
+            MatchContext context,
+            List<TurningPoint> turningPoints,
+            List<Decision> decisions,
+            List<Recommendation> recommendations
+    ) {
         var cards = new ArrayList<CoachFeed.Card>();
         turningPoints.stream().limit(2).forEach(point -> cards.add(new CoachFeed.Card(
                 point.at(), CoachFeed.Kind.POOR,
@@ -28,14 +39,16 @@ public final class CoachFeedEngine {
                 .thenComparing(CoachFeed.Card::at));
         String leader = context == null || context.summary().finalLeaderName() == null
                 ? "явный лидер не определён" : context.summary().finalLeaderName();
-        List<String> recommendations = cards.stream()
-                .filter(card -> card.kind() == CoachFeed.Kind.POOR || card.kind() == CoachFeed.Kind.RISKY)
-                .map(this::recommendation).distinct().limit(3).toList();
-        if (recommendations.isEmpty()) {
-            recommendations = List.of("Сверь ключевые переломы с таймлайном и проверь, можно ли было безопаснее сохранить преимущество.");
+        List<String> nextActions = recommendations == null ? List.of() : recommendations.stream()
+                .map(Recommendation::nextAction)
+                .distinct()
+                .limit(3)
+                .toList();
+        if (nextActions.isEmpty()) {
+            nextActions = List.of("Сверь ключевые переломы с таймлайном и проверь, можно ли было безопаснее сохранить преимущество.");
         }
         return new CoachFeed("В финальном измеренном состоянии лидировал " + leader + ".",
-                cards.stream().limit(5).toList(), recommendations);
+                cards.stream().limit(5).toList(), nextActions);
     }
 
     private CoachFeed.Card card(Decision decision) {
@@ -51,13 +64,6 @@ public final class CoachFeedEngine {
             default -> new CoachFeed.Card(decision.startedAt(), CoachFeed.Kind.INFO, CoachFeed.Impact.LOW,
                     decision.type().name(), "Обнаружено решение игрока.", decision.confidence().value());
         };
-    }
-
-    private String recommendation(CoachFeed.Card card) {
-        if (card.title().contains("боевой")) {
-            return "Перед повторной атакой проверь восстановление армии и текущее относительное преимущество.";
-        }
-        return "Разбери момент " + format(card.at().toSeconds()) + " и выбери более безопасный вариант при похожем состоянии игры.";
     }
 
     private String reasons(List<TurningPoint.Reason> reasons) {
@@ -90,5 +96,4 @@ public final class CoachFeedEngine {
     private static String safe(String value) { return value == null ? "неизвестного игрока" : value; }
     private static double round(double value) { return Math.round(value * 10.0) / 10.0; }
     private static String signed(double value) { return (value >= 0 ? "+" : "") + round(value); }
-    private static String format(long seconds) { return (seconds / 60) + ":" + String.format("%02d", seconds % 60); }
 }

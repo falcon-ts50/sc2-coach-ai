@@ -10,6 +10,9 @@ import ai.sc2coach.domain.context.TurningPoint;
 import ai.sc2coach.domain.context.TurningPointEngine;
 import ai.sc2coach.domain.decision.Decision;
 import ai.sc2coach.domain.decision.DecisionEngine;
+import ai.sc2coach.domain.knowledge.KnowledgeContext;
+import ai.sc2coach.domain.knowledge.KnowledgeEngine;
+import ai.sc2coach.domain.knowledge.Recommendation;
 import ai.sc2coach.domain.model.Match;
 import ai.sc2coach.domain.model.ReplayDomainMapper;
 import org.springframework.stereotype.Service;
@@ -29,6 +32,7 @@ public final class AnalysisService {
     private final MatchContextEngine contextEngine = new MatchContextEngine();
     private final TurningPointEngine turningPointEngine = new TurningPointEngine();
     private final DecisionEngine decisionEngine = DecisionEngine.defaults();
+    private final KnowledgeEngine knowledgeEngine = KnowledgeEngine.defaults();
     private final CoachFeedEngine coachFeedEngine = new CoachFeedEngine();
 
     public AnalysisService(ReplayDecoder replayDecoder) {
@@ -48,7 +52,12 @@ public final class AnalysisService {
             MatchContext matchContext = contextEngine.analyze(match);
             List<TurningPoint> turningPoints = turningPointEngine.detect(matchContext);
             List<Decision> decisions = decisionEngine.detect(match);
-            CoachFeed coachFeed = coachFeedEngine.build(match, matchContext, turningPoints, decisions);
+            List<Recommendation> recommendations = knowledgeEngine.evaluate(
+                    new KnowledgeContext(match, matchContext, turningPoints, decisions)
+            );
+            CoachFeed coachFeed = coachFeedEngine.build(
+                    match, matchContext, turningPoints, decisions, recommendations
+            );
             return AnalysisResponse.from(analysis, matchContext, turningPoints, coachFeed);
         } catch (IOException exception) {
             throw new ReplayDecodingException("Could not process replay upload", exception);
