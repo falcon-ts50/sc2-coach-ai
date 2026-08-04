@@ -9,4 +9,41 @@ if [ ! -x "$VENV/bin/python" ]; then
   exit 1
 fi
 
-exec "$VENV/bin/python" "$ROOT_DIR/coach.py" "$@"
+INPUT_JSON=$1
+OUT_DIR=out
+PREV=""
+for ARG in "$@"; do
+  if [ "$PREV" = "--out" ]; then
+    OUT_DIR=$ARG
+    break
+  fi
+  PREV=$ARG
+done
+
+"$VENV/bin/python" "$ROOT_DIR/coach.py" "$@"
+"$VENV/bin/python" "$ROOT_DIR/charts.py" "$INPUT_JSON" --out "$OUT_DIR"
+
+cat >> "$OUT_DIR/coaching_report.md" <<'EOF'
+
+## Charts
+
+### Army value
+
+![Army value](charts/army_value.png)
+
+### Active workers
+
+![Workers](charts/workers.png)
+
+### Unspent resources
+
+![Bank](charts/bank.png)
+
+### Collection rate
+
+![Income rate](charts/income_rate.png)
+
+### Cumulative army losses
+
+![Army losses](charts/army_losses.png)
+EOF

@@ -4,12 +4,13 @@ Open-source tooling for decoding StarCraft II replay files and turning determini
 
 ## Status
 
-The project is currently stabilizing `v0.1`:
+The project is currently at `v0.2`:
 
 - reads `.SC2Replay` files locally through `sc2reader` and Blizzard `s2protocol`;
 - exports replay metadata, players, teams, MMR (when present), units, structures, upgrades, commands and periodic statistics;
 - produces machine-readable JSON and Markdown;
-- generates initial coaching metrics for army value, losses, workers, resource float, supply blocks and turning points.
+- generates coaching metrics for army value, losses, workers, resource float, supply blocks and turning points;
+- generates PNG charts for army value, workers, bank, collection rate and cumulative army losses.
 
 The replay is processed locally and is not uploaded anywhere.
 
@@ -28,7 +29,7 @@ chmod +x run.sh run_coach.sh
   --out ./results/match
 ```
 
-Generate deterministic coaching metrics:
+Generate deterministic coaching metrics and charts:
 
 ```bash
 ./run_coach.sh ./results/match/replay_analysis.json \
@@ -43,7 +44,14 @@ results/match/replay_analysis.json
 results/match/replay_analysis.md
 results/match/coaching_analysis.json
 results/match/coaching_report.md
+results/match/charts/army_value.png
+results/match/charts/workers.png
+results/match/charts/bank.png
+results/match/charts/income_rate.png
+results/match/charts/army_losses.png
 ```
+
+The chart images are linked from `coaching_report.md` with relative paths.
 
 ## Time model
 
@@ -59,7 +67,7 @@ On `Faster`, real elapsed time is shorter. Both values are exported separately a
 
 ```bash
 python -m pip install -r requirements-dev.txt
-pytest -q
+python -m pytest -q
 ```
 
 ## Roadmap
@@ -83,7 +91,7 @@ Versioned normalized replay JSON
    ↓
 Timeline / economy / combat engines
    ↓
-Coaching rules
+Coaching rules and chart renderer
    ↓
 Markdown / JSON / HTML / PDF reports
 ```
