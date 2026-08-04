@@ -29,6 +29,7 @@ case "$LANGUAGE" in en|ru) ;; *) echo "--lang must be en or ru" >&2; exit 2 ;; e
 
 "$VENV/bin/python" "$ROOT_DIR/coach.py" "$INPUT_JSON" --player "$PLAYER" --out "$OUT_DIR"
 "$VENV/bin/python" "$ROOT_DIR/battles_v033.py" "$INPUT_JSON" --player "$PLAYER" --out "$OUT_DIR"
+"$VENV/bin/python" "$ROOT_DIR/build_order.py" "$INPUT_JSON" --player "$PLAYER" --out "$OUT_DIR" >/dev/null
 "$VENV/bin/python" "$ROOT_DIR/coach_rules_i18n.py" \
   --coaching "$OUT_DIR/coaching_analysis.json" \
   --battles "$OUT_DIR/battle_analysis.json" \
@@ -40,13 +41,15 @@ case "$LANGUAGE" in en|ru) ;; *) echo "--lang must be en or ru" >&2; exit 2 ;; e
 "$VENV/bin/python" "$ROOT_DIR/review_bundle.py" "$INPUT_JSON" --out "$OUT_DIR" >/dev/null
 "$VENV/bin/python" "$ROOT_DIR/report_i18n.py" --replay "$INPUT_JSON" --out "$OUT_DIR" --lang "$LANGUAGE"
 "$VENV/bin/python" "$ROOT_DIR/pdf_report_v2.py" "$INPUT_JSON" --out "$OUT_DIR" --lang "$LANGUAGE" >/dev/null
-# Rebuild the ZIP with localized Markdown and the final PDF.
+# Rebuild the ZIP with localized Markdown, build order and the final PDF.
 "$VENV/bin/python" "$ROOT_DIR/review_bundle.py" "$INPUT_JSON" --out "$OUT_DIR" >/dev/null
 
 if [ "$LANGUAGE" = "ru" ]; then
+  echo "Модель билд-ордера: $OUT_DIR/build_order.json"
   echo "PDF-отчёт: $OUT_DIR/sc2_coach_report.pdf"
   echo "Бандл для проверки: $OUT_DIR/sc2_coach_review_bundle.zip"
 else
+  echo "Build-order model: $OUT_DIR/build_order.json"
   echo "PDF report: $OUT_DIR/sc2_coach_report.pdf"
   echo "Review bundle: $OUT_DIR/sc2_coach_review_bundle.zip"
 fi
