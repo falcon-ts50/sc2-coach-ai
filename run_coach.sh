@@ -11,39 +11,43 @@ fi
 
 INPUT_JSON=$1
 OUT_DIR=out
+PLAYER=""
 PREV=""
 for ARG in "$@"; do
-  if [ "$PREV" = "--out" ]; then
-    OUT_DIR=$ARG
-    break
-  fi
+  if [ "$PREV" = "--out" ]; then OUT_DIR=$ARG; fi
+  if [ "$PREV" = "--player" ]; then PLAYER=$ARG; fi
   PREV=$ARG
 done
 
+if [ -z "$PLAYER" ]; then
+  echo "--player is required" >&2
+  exit 2
+fi
+
 "$VENV/bin/python" "$ROOT_DIR/coach.py" "$@"
-"$VENV/bin/python" "$ROOT_DIR/charts.py" "$INPUT_JSON" --out "$OUT_DIR"
+"$VENV/bin/python" "$ROOT_DIR/battles.py" "$INPUT_JSON" --player "$PLAYER" --out "$OUT_DIR"
+"$VENV/bin/python" "$ROOT_DIR/charts.py" "$INPUT_JSON" --battles "$OUT_DIR/battle_analysis.json" --out "$OUT_DIR"
 
 cat >> "$OUT_DIR/coaching_report.md" <<'EOF'
+
+## Battle analysis
+
+See [battle_report.md](battle_report.md) for detected combat windows and estimated trade results.
 
 ## Charts
 
 ### Army value
-
 ![Army value](charts/army_value.png)
 
 ### Active workers
-
 ![Workers](charts/workers.png)
 
 ### Unspent resources
-
 ![Bank](charts/bank.png)
 
 ### Collection rate
-
 ![Income rate](charts/income_rate.png)
 
 ### Cumulative army losses
-
 ![Army losses](charts/army_losses.png)
 EOF

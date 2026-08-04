@@ -4,13 +4,14 @@ Open-source tooling for decoding StarCraft II replay files and turning determini
 
 ## Status
 
-The project is currently at `v0.2`:
+The project is currently at `v0.3`:
 
 - reads `.SC2Replay` files locally through `sc2reader` and Blizzard `s2protocol`;
 - exports replay metadata, players, teams, MMR (when present), units, structures, upgrades, commands and periodic statistics;
 - produces machine-readable JSON and Markdown;
 - generates coaching metrics for army value, losses, workers, resource float, supply blocks and turning points;
-- generates PNG charts for army value, workers, bank, collection rate and cumulative army losses.
+- generates PNG charts for army value, workers, bank, collection rate and cumulative army losses;
+- detects battle windows from clustered unit deaths, estimates trade losses from player-stat deltas and annotates charts with battle intervals.
 
 The replay is processed locally and is not uploaded anywhere.
 
@@ -29,7 +30,7 @@ chmod +x run.sh run_coach.sh
   --out ./results/match
 ```
 
-Generate deterministic coaching metrics and charts:
+Generate coaching metrics, battle analysis and charts:
 
 ```bash
 ./run_coach.sh ./results/match/replay_analysis.json \
@@ -44,6 +45,8 @@ results/match/replay_analysis.json
 results/match/replay_analysis.md
 results/match/coaching_analysis.json
 results/match/coaching_report.md
+results/match/battle_analysis.json
+results/match/battle_report.md
 results/match/charts/army_value.png
 results/match/charts/workers.png
 results/match/charts/bank.png
@@ -51,7 +54,7 @@ results/match/charts/income_rate.png
 results/match/charts/army_losses.png
 ```
 
-The chart images are linked from `coaching_report.md` with relative paths.
+Battle windows are inferred from death-event clusters. Resource trade values are estimates derived from cumulative army-loss deltas in the nearest `PlayerStatsEvent` snapshots.
 
 ## Time model
 
