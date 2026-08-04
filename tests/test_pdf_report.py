@@ -5,7 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from pdf_report import build_pdf, register_fonts
+from pdf_report import register_fonts
+from pdf_report_v2 import build_pdf
 
 
 def write_json(path: Path, value: dict) -> None:
