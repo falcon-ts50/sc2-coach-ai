@@ -1,2 +1,2 @@
-# repository-template
-Template repository for all projects.
+# Star Craft II analyzer
+Analyze your game and enjoy!
