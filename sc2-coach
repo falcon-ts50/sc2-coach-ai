@@ -9,7 +9,7 @@ Usage:
   ./sc2-coach REPLAY.SC2Replay --player NAME [--out DIRECTORY] [--lang en|ru]
 
 Runs the complete local pipeline:
-  decode -> coaching -> engagements -> strategic rules -> charts -> diagnostics -> review bundle
+  decode -> coaching -> engagements -> strategic coaching -> charts -> diagnostics -> review bundle
 
 Language defaults to English. Use --lang ru for Russian reports.
 
