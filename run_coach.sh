@@ -26,9 +26,17 @@ fi
 
 "$VENV/bin/python" "$ROOT_DIR/coach.py" "$@"
 "$VENV/bin/python" "$ROOT_DIR/battles_v033.py" "$INPUT_JSON" --player "$PLAYER" --out "$OUT_DIR"
+"$VENV/bin/python" "$ROOT_DIR/coach_rules.py" \
+  --coaching "$OUT_DIR/coaching_analysis.json" \
+  --battles "$OUT_DIR/battle_analysis.json" \
+  --out "$OUT_DIR"
 "$VENV/bin/python" "$ROOT_DIR/charts.py" "$INPUT_JSON" --battles "$OUT_DIR/battle_analysis.json" --out "$OUT_DIR"
 
 cat >> "$OUT_DIR/coaching_report.md" <<'EOF'
+
+## Strategic recommendations
+
+See [strategic_report.md](strategic_report.md) for explainable rule-based coaching findings.
 
 ## Engagement analysis
 
