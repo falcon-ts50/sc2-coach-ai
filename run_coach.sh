@@ -51,3 +51,7 @@ See [battle_report.md](battle_report.md) for battles, skirmishes, worker harassm
 ### Cumulative army losses
 ![Army losses](charts/army_losses.png)
 EOF
+
+"$VENV/bin/python" "$ROOT_DIR/review_bundle.py" "$INPUT_JSON" --out "$OUT_DIR"
+
+echo "Review bundle: $OUT_DIR/sc2_coach_review_bundle.zip"
