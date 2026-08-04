@@ -1,6 +1,7 @@
 package ai.sc2coach.portal.analysis;
 
 import ai.sc2coach.domain.ReplayAnalysis;
+import ai.sc2coach.domain.context.MatchContext;
 
 import java.util.List;
 
@@ -9,19 +10,21 @@ public record AnalysisResponse(
         String map,
         Double gameSeconds,
         List<PlayerSummary> players,
-        MatchComparison.Result comparison
+        MatchComparison.Result comparison,
+        MatchContext matchContext
 ) {
     public AnalysisResponse {
         players = List.copyOf(players);
     }
 
-    public static AnalysisResponse from(ReplayAnalysis analysis) {
+    public static AnalysisResponse from(ReplayAnalysis analysis, MatchContext matchContext) {
         return new AnalysisResponse(
                 analysis.schemaVersion(),
                 analysis.replay() == null ? null : analysis.replay().map(),
                 analysis.replay() == null ? null : analysis.replay().gameSeconds(),
                 analysis.players().stream().map(PlayerSummary::from).toList(),
-                MatchComparison.compare(analysis)
+                MatchComparison.compare(analysis),
+                matchContext
         );
     }
 
