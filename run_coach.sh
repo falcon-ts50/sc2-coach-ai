@@ -39,7 +39,7 @@ case "$LANGUAGE" in en|ru) ;; *) echo "--lang must be en or ru" >&2; exit 2 ;; e
 # First pass creates diagnostics consumed by the localized summary and PDF.
 "$VENV/bin/python" "$ROOT_DIR/review_bundle.py" "$INPUT_JSON" --out "$OUT_DIR" >/dev/null
 "$VENV/bin/python" "$ROOT_DIR/report_i18n.py" --replay "$INPUT_JSON" --out "$OUT_DIR" --lang "$LANGUAGE"
-"$VENV/bin/python" "$ROOT_DIR/pdf_report.py" "$INPUT_JSON" --out "$OUT_DIR" --lang "$LANGUAGE" >/dev/null
+"$VENV/bin/python" "$ROOT_DIR/pdf_report_v2.py" "$INPUT_JSON" --out "$OUT_DIR" --lang "$LANGUAGE" >/dev/null
 # Rebuild the ZIP with localized Markdown and the final PDF.
 "$VENV/bin/python" "$ROOT_DIR/review_bundle.py" "$INPUT_JSON" --out "$OUT_DIR" >/dev/null
 
