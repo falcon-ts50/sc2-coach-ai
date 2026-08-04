@@ -4,6 +4,8 @@ import ai.sc2coach.domain.ReplayAnalysis;
 import ai.sc2coach.domain.ReplayAnalysisReader;
 import ai.sc2coach.domain.context.MatchContext;
 import ai.sc2coach.domain.context.MatchContextEngine;
+import ai.sc2coach.domain.context.TurningPoint;
+import ai.sc2coach.domain.context.TurningPointEngine;
 import ai.sc2coach.domain.model.Match;
 import ai.sc2coach.domain.model.ReplayDomainMapper;
 import org.springframework.stereotype.Service;
@@ -12,6 +14,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 
 @Service
 public final class AnalysisService {
@@ -20,6 +23,7 @@ public final class AnalysisService {
     private final ReplayAnalysisReader reader = new ReplayAnalysisReader();
     private final ReplayDomainMapper domainMapper = new ReplayDomainMapper();
     private final MatchContextEngine contextEngine = new MatchContextEngine();
+    private final TurningPointEngine turningPointEngine = new TurningPointEngine();
 
     public AnalysisService(ReplayDecoder replayDecoder) {
         this.replayDecoder = replayDecoder;
@@ -36,7 +40,8 @@ public final class AnalysisService {
             ReplayAnalysis analysis = reader.read(analysisPath);
             Match match = domainMapper.map(analysis);
             MatchContext matchContext = contextEngine.analyze(match);
-            return AnalysisResponse.from(analysis, matchContext);
+            List<TurningPoint> turningPoints = turningPointEngine.detect(matchContext);
+            return AnalysisResponse.from(analysis, matchContext, turningPoints);
         } catch (IOException exception) {
             throw new ReplayDecodingException("Could not process replay upload", exception);
         }
