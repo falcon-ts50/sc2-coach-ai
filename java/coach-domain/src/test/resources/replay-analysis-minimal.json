@@ -1,0 +1,44 @@
+{
+  "schema_version": "0.1.0",
+  "source": "fixture.SC2Replay",
+  "replay": {
+    "map": "Test Map",
+    "release": "5.0.15",
+    "base_build": 97563,
+    "type": "2v2",
+    "game_seconds": 721.5,
+    "winner": ["Alpha", "Beta"]
+  },
+  "focus_player": "Alpha",
+  "players": [
+    {
+      "pid": 1,
+      "name": "Alpha",
+      "race": "Terran",
+      "team": 1,
+      "result": "Win",
+      "mmr": 3500,
+      "apm": 112.4,
+      "stats": [
+        {
+          "time": 60.0,
+          "clock": "01:00",
+          "workers_active_count": 18,
+          "food_used": 23,
+          "food_made": 31,
+          "minerals_collection_rate": 780,
+          "vespene_collection_rate": 120
+        }
+      ]
+    }
+  ],
+  "timeline": [
+    {
+      "time": 42.5,
+      "clock": "00:42",
+      "player": "Alpha",
+      "event": "UnitInitEvent",
+      "unit": "Barracks"
+    }
+  ]
+}
