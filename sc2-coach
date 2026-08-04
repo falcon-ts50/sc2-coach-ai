@@ -40,20 +40,17 @@ fi
 
 PLAYER=""
 OUT_DIR=""
-DECODE_ARGS="$REPLAY"
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --player)
       [ "$#" -ge 2 ] || { echo "--player requires a value" >&2; exit 2; }
       PLAYER=$2
-      DECODE_ARGS="$DECODE_ARGS --player $2"
       shift 2
       ;;
     --out)
       [ "$#" -ge 2 ] || { echo "--out requires a value" >&2; exit 2; }
       OUT_DIR=$2
-      DECODE_ARGS="$DECODE_ARGS --out $2"
       shift 2
       ;;
     -h|--help)
@@ -82,7 +79,7 @@ fi
 mkdir -p "$OUT_DIR"
 
 printf '%s\n' "[1/2] Decoding replay..."
-"$ROOT_DIR/run.sh" "$REPLAY" --player "$PLAYER" --out "$OUT_DIR"
+sh "$ROOT_DIR/run.sh" "$REPLAY" --player "$PLAYER" --out "$OUT_DIR"
 
 ANALYSIS_JSON="$OUT_DIR/replay_analysis.json"
 if [ ! -f "$ANALYSIS_JSON" ]; then
@@ -91,7 +88,7 @@ if [ ! -f "$ANALYSIS_JSON" ]; then
 fi
 
 printf '%s\n' "[2/2] Generating coaching report, engagements, charts and bundle..."
-"$ROOT_DIR/run_coach.sh" "$ANALYSIS_JSON" --player "$PLAYER" --out "$OUT_DIR"
+sh "$ROOT_DIR/run_coach.sh" "$ANALYSIS_JSON" --player "$PLAYER" --out "$OUT_DIR"
 
 BUNDLE="$OUT_DIR/sc2_coach_review_bundle.zip"
 printf '\nSC2 Coach analysis complete.\n'
