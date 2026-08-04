@@ -1,5 +1,6 @@
 package ai.sc2coach.portal.api;
 
+import ai.sc2coach.domain.coach.CoachFeed;
 import ai.sc2coach.domain.context.MatchContext;
 import ai.sc2coach.domain.context.TurningPoint;
 import ai.sc2coach.portal.analysis.AnalysisResponse;
@@ -42,10 +43,16 @@ class AnalysisControllerTest {
                 TurningPoint.Severity.MAJOR,
                 List.of(new TurningPoint.Reason("army", "Alpha", 24))
         );
+        var feed = new CoachFeed(
+                "В финале лидировал Alpha.",
+                List.of(new CoachFeed.Card(Duration.ofSeconds(90), CoachFeed.Kind.POOR,
+                        CoachFeed.Impact.HIGH, "Перелом", "Преимущество изменилось.", 0.8)),
+                List.of("Сохраняй армию после неудачного боя.")
+        );
         given(analysisService.analyze(any())).willReturn(new AnalysisResponse(
                 "0.1.0", "Test Map", 120.0,
                 List.of(new AnalysisResponse.PlayerSummary(1, "Alpha", "Terran", 1, "Win", 3500, 100.0)),
-                comparison, new MatchContext(List.of(), summary), List.of(point)
+                comparison, new MatchContext(List.of(), summary), List.of(point), feed
         ));
         MockMultipartFile replay = new MockMultipartFile(
                 "replay", "match.SC2Replay", "application/octet-stream", new byte[]{1}
@@ -55,6 +62,6 @@ class AnalysisControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.matchContext.summary.finalLeaderName").value("Alpha"))
                 .andExpect(jsonPath("$.turningPoints[0].newLeaderName").value("Alpha"))
-                .andExpect(jsonPath("$.turningPoints[0].reasons[0].component").value("army"));
+                .andExpect(jsonPath("$.coachFeed.cards[0].title").value("Перелом"));
     }
 }
