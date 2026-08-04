@@ -61,7 +61,7 @@ def diagnostics(battle_data: dict[str, Any]) -> dict[str, Any]:
             warnings.append({"code": "zero_army_delta", "engagement_id": engagement_id, "message": "Army engagement has zero estimated army-loss delta."})
         previous_end = max(previous_end, end)
     return {
-        "schema_version": "0.4.0",
+        "schema_version": "0.5.0",
         "status": "ok" if not warnings else "warnings",
         "engagement_count": len(engagements),
         "warning_count": len(warnings),
@@ -160,13 +160,14 @@ def bundle(out_dir: Path, replay_json: Path) -> Path:
         out_dir / "battle_report.md",
         out_dir / "strategic_analysis.json",
         out_dir / "strategic_report.md",
+        out_dir / "sc2_coach_report.pdf",
         out_dir / "review_summary.md",
         out_dir / "diagnostics.json",
     ]
     candidates.extend(sorted((out_dir / "charts").glob("*.png")) if (out_dir / "charts").exists() else [])
     files = [path for path in candidates if path.exists()]
     manifest = {
-        "schema_version": "0.4.0",
+        "schema_version": "0.5.0",
         "files": [
             {"name": ("replay_analysis.json" if path == replay_json else str(path.relative_to(out_dir))), "size": path.stat().st_size, "sha256": sha256(path)}
             for path in files

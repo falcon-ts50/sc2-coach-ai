@@ -2,3 +2,4 @@ sc2reader>=1.9.0
 s2protocol>=5.0.16.97563.0
 mpyq>=0.2.5
 matplotlib>=3.9
+reportlab>=4.2,<5

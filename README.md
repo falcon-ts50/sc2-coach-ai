@@ -4,13 +4,14 @@ Open-source tooling for decoding StarCraft II replay files and turning determini
 
 ## Status
 
-The project is currently at `v0.4`:
+The project is currently at `v0.5`:
 
 - reads `.SC2Replay` files locally through `sc2reader` and Blizzard `s2protocol`;
 - exports replay metadata, players, teams, MMR, units, structures, upgrades, commands and periodic statistics;
 - generates coaching metrics, engagement analysis, charts and diagnostics;
 - produces explainable strategic recommendations with numeric evidence;
-- creates one ZIP containing all reports and charts;
+- creates a polished A4 PDF report with embedded charts;
+- creates one ZIP containing all reports, charts and the PDF;
 - supports English by default and Russian through `--lang ru`.
 
 The replay is processed only after an explicit CLI invocation. There is no background watch mode.
@@ -21,6 +22,7 @@ Requirements:
 
 - Python 3.11+
 - Internet access for the initial dependency installation
+- DejaVu Sans fonts (`dejavu-fonts` on Arch/CachyOS, `fonts-dejavu-core` on Debian/Ubuntu)
 
 ```bash
 chmod +x sc2-coach
@@ -49,13 +51,20 @@ The complete pipeline is:
 decode
   -> coaching analysis
   -> engagement analysis
-  -> strategic rules
+  -> strategic coaching
   -> charts
   -> diagnostics
+  -> PDF report
   -> review bundle
 ```
 
-The main shareable file is:
+The main human-readable output is:
+
+```text
+results/match/sc2_coach_report.pdf
+```
+
+The complete shareable package is:
 
 ```text
 results/match/sc2_coach_review_bundle.zip
@@ -63,12 +72,25 @@ results/match/sc2_coach_review_bundle.zip
 
 When `--out` is omitted, the command creates a directory under `results/` using the replay filename.
 
+## PDF report
+
+The PDF is generated programmatically with ReportLab and includes:
+
+- a localized title page;
+- match metadata and focus-player macro cards;
+- prioritized strategic findings with severity, evidence and concrete actions;
+- a compact engagement table;
+- full-width army, worker, resource-bank, income-rate and army-loss charts;
+- page headers, footers and page numbers.
+
+The PDF does not invent new analysis. It presents the same deterministic facts and explainable rule results already exported in JSON and Markdown.
+
 ## Localization contract
 
 `--lang` accepts:
 
 - `en` — default;
-- `ru` — Russian Markdown reports and CLI messages.
+- `ru` — Russian Markdown reports, PDF report and CLI messages.
 
 JSON field names, categories, evidence metric names and `rule_id` values remain stable English identifiers for API compatibility. Human-readable strategic titles, explanations and recommendations follow the selected language.
 
@@ -92,6 +114,7 @@ results/match/battle_analysis.json
 results/match/battle_report.md
 results/match/strategic_analysis.json
 results/match/strategic_report.md
+results/match/sc2_coach_report.pdf
 results/match/review_summary.md
 results/match/diagnostics.json
 results/match/sc2_coach_review_bundle.zip
@@ -113,8 +136,8 @@ python -m pytest -q
 - `v0.2`: economy, army and worker charts
 - `v0.3`: automatic engagement and turning-point detection
 - `v0.4`: explainable coaching rules and localization
-- `v0.5`: build-order comparison against reference replays
-- `v0.6`: polished HTML/PDF reports
+- `v0.5`: polished localized PDF report
+- `v0.6`: build-order comparison against reference replays
 - `v1.0`: web application with explicit replay upload and interactive analysis
 
 ## License and trademarks
