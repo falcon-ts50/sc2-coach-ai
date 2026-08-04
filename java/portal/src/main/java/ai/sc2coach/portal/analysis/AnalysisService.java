@@ -2,6 +2,10 @@ package ai.sc2coach.portal.analysis;
 
 import ai.sc2coach.domain.ReplayAnalysis;
 import ai.sc2coach.domain.ReplayAnalysisReader;
+import ai.sc2coach.domain.context.MatchContext;
+import ai.sc2coach.domain.context.MatchContextEngine;
+import ai.sc2coach.domain.model.Match;
+import ai.sc2coach.domain.model.ReplayDomainMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -14,6 +18,8 @@ public final class AnalysisService {
 
     private final ReplayDecoder replayDecoder;
     private final ReplayAnalysisReader reader = new ReplayAnalysisReader();
+    private final ReplayDomainMapper domainMapper = new ReplayDomainMapper();
+    private final MatchContextEngine contextEngine = new MatchContextEngine();
 
     public AnalysisService(ReplayDecoder replayDecoder) {
         this.replayDecoder = replayDecoder;
@@ -28,7 +34,9 @@ public final class AnalysisService {
             }
             Path analysisPath = replayDecoder.decode(replayPath, workspace.output());
             ReplayAnalysis analysis = reader.read(analysisPath);
-            return AnalysisResponse.from(analysis);
+            Match match = domainMapper.map(analysis);
+            MatchContext matchContext = contextEngine.analyze(match);
+            return AnalysisResponse.from(analysis, matchContext);
         } catch (IOException exception) {
             throw new ReplayDecodingException("Could not process replay upload", exception);
         }
