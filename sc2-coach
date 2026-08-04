@@ -6,93 +6,74 @@ ROOT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 usage() {
   cat <<'EOF'
 Usage:
-  ./sc2-coach REPLAY.SC2Replay --player NAME [--out DIRECTORY]
+  ./sc2-coach REPLAY.SC2Replay --player NAME [--out DIRECTORY] [--lang en|ru]
 
 Runs the complete local pipeline:
-  decode -> coaching -> engagements -> charts -> diagnostics -> review bundle
+  decode -> coaching -> engagements -> strategic coaching -> charts -> diagnostics -> review bundle
+
+Language defaults to English. Use --lang ru for Russian reports.
 
 Example:
   ./sc2-coach ./replays/match.SC2Replay \
     --player dragonDriver \
+    --lang ru \
     --out ./results/match
 EOF
 }
 
-if [ "$#" -eq 0 ]; then
-  usage >&2
-  exit 2
-fi
-
-case "${1:-}" in
-  -h|--help)
-    usage
-    exit 0
-    ;;
-esac
+if [ "$#" -eq 0 ]; then usage >&2; exit 2; fi
+case "${1:-}" in -h|--help) usage; exit 0 ;; esac
 
 REPLAY=$1
 shift
-
-if [ ! -f "$REPLAY" ]; then
-  echo "Replay file not found: $REPLAY" >&2
-  exit 2
-fi
+if [ ! -f "$REPLAY" ]; then echo "Replay file not found: $REPLAY" >&2; exit 2; fi
 
 PLAYER=""
 OUT_DIR=""
-
+LANGUAGE=en
 while [ "$#" -gt 0 ]; do
   case "$1" in
-    --player)
-      [ "$#" -ge 2 ] || { echo "--player requires a value" >&2; exit 2; }
-      PLAYER=$2
-      shift 2
-      ;;
-    --out)
-      [ "$#" -ge 2 ] || { echo "--out requires a value" >&2; exit 2; }
-      OUT_DIR=$2
-      shift 2
-      ;;
-    -h|--help)
-      usage
-      exit 0
-      ;;
-    *)
-      echo "Unknown argument: $1" >&2
-      usage >&2
-      exit 2
-      ;;
+    --player) [ "$#" -ge 2 ] || { echo "--player requires a value" >&2; exit 2; }; PLAYER=$2; shift 2 ;;
+    --out) [ "$#" -ge 2 ] || { echo "--out requires a value" >&2; exit 2; }; OUT_DIR=$2; shift 2 ;;
+    --lang) [ "$#" -ge 2 ] || { echo "--lang requires a value" >&2; exit 2; }; LANGUAGE=$2; shift 2 ;;
+    -h|--help) usage; exit 0 ;;
+    *) echo "Unknown argument: $1" >&2; usage >&2; exit 2 ;;
   esac
 done
 
-if [ -z "$PLAYER" ]; then
-  echo "--player is required" >&2
-  exit 2
-fi
+if [ -z "$PLAYER" ]; then echo "--player is required" >&2; exit 2; fi
+case "$LANGUAGE" in en|ru) ;; *) echo "--lang must be en or ru" >&2; exit 2 ;; esac
 
 if [ -z "$OUT_DIR" ]; then
   STEM=$(basename "$REPLAY")
   STEM=${STEM%.SC2Replay}
   OUT_DIR="$ROOT_DIR/results/$STEM"
 fi
-
 mkdir -p "$OUT_DIR"
 
-printf '%s\n' "[1/2] Decoding replay..."
+if [ "$LANGUAGE" = "ru" ]; then
+  printf '%s\n' "[1/2] Декодирование реплея..."
+else
+  printf '%s\n' "[1/2] Decoding replay..."
+fi
 sh "$ROOT_DIR/run.sh" "$REPLAY" --player "$PLAYER" --out "$OUT_DIR"
 
 ANALYSIS_JSON="$OUT_DIR/replay_analysis.json"
-if [ ! -f "$ANALYSIS_JSON" ]; then
-  echo "Decoder did not create: $ANALYSIS_JSON" >&2
-  exit 1
-fi
+if [ ! -f "$ANALYSIS_JSON" ]; then echo "Decoder did not create: $ANALYSIS_JSON" >&2; exit 1; fi
 
-printf '%s\n' "[2/2] Generating coaching report, engagements, charts and bundle..."
-sh "$ROOT_DIR/run_coach.sh" "$ANALYSIS_JSON" --player "$PLAYER" --out "$OUT_DIR"
+if [ "$LANGUAGE" = "ru" ]; then
+  printf '%s\n' "[2/2] Создание анализа, графиков и бандла..."
+else
+  printf '%s\n' "[2/2] Generating analysis, charts and bundle..."
+fi
+sh "$ROOT_DIR/run_coach.sh" "$ANALYSIS_JSON" --player "$PLAYER" --out "$OUT_DIR" --lang "$LANGUAGE"
 
 BUNDLE="$OUT_DIR/sc2_coach_review_bundle.zip"
-printf '\nSC2 Coach analysis complete.\n'
-printf 'Output directory: %s\n' "$OUT_DIR"
-if [ -f "$BUNDLE" ]; then
-  printf 'Review bundle: %s\n' "$BUNDLE"
+printf '\n'
+if [ "$LANGUAGE" = "ru" ]; then
+  printf 'Анализ SC2 Coach завершён.\nКаталог результатов: %s\n' "$OUT_DIR"
+  [ -f "$BUNDLE" ] && printf 'Бандл: %s\n' "$BUNDLE"
+else
+  printf 'SC2 Coach analysis complete.\nOutput directory: %s\n' "$OUT_DIR"
+  [ -f "$BUNDLE" ] && printf 'Review bundle: %s\n' "$BUNDLE"
 fi

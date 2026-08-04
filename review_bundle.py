@@ -61,7 +61,7 @@ def diagnostics(battle_data: dict[str, Any]) -> dict[str, Any]:
             warnings.append({"code": "zero_army_delta", "engagement_id": engagement_id, "message": "Army engagement has zero estimated army-loss delta."})
         previous_end = max(previous_end, end)
     return {
-        "schema_version": "0.3.4",
+        "schema_version": "0.4.0",
         "status": "ok" if not warnings else "warnings",
         "engagement_count": len(engagements),
         "warning_count": len(warnings),
@@ -69,7 +69,12 @@ def diagnostics(battle_data: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def summary_markdown(battle_data: dict[str, Any], coaching_data: dict[str, Any] | None, diagnostics_data: dict[str, Any]) -> str:
+def summary_markdown(
+    battle_data: dict[str, Any],
+    coaching_data: dict[str, Any] | None,
+    strategic_data: dict[str, Any] | None,
+    diagnostics_data: dict[str, Any],
+) -> str:
     engagements = battle_data.get("battles", [])
     focus_team = str(battle_data.get("focus_team"))
     type_counts = Counter(str(item.get("engagement_type", "unknown")) for item in engagements)
@@ -116,6 +121,16 @@ def summary_markdown(battle_data: dict[str, Any], coaching_data: dict[str, Any] 
     else:
         lines.append("- None detected.")
 
+    if strategic_data:
+        lines += ["", "## Strategic findings", ""]
+        findings = strategic_data.get("findings", [])
+        if findings:
+            for item in findings[:5]:
+                timing = f" `{item.get('time_start_clock')}`" if item.get("time_start_clock") else ""
+                lines.append(f"- **{item.get('severity')}**{timing} — {item.get('title')}")
+        else:
+            lines.append("- No coaching rule crossed its threshold.")
+
     if coaching_data:
         focus = coaching_data.get("focus_player")
         player = next((p for p in coaching_data.get("players", []) if p.get("name") == focus), None)
@@ -143,13 +158,15 @@ def bundle(out_dir: Path, replay_json: Path) -> Path:
         out_dir / "coaching_report.md",
         out_dir / "battle_analysis.json",
         out_dir / "battle_report.md",
+        out_dir / "strategic_analysis.json",
+        out_dir / "strategic_report.md",
         out_dir / "review_summary.md",
         out_dir / "diagnostics.json",
     ]
     candidates.extend(sorted((out_dir / "charts").glob("*.png")) if (out_dir / "charts").exists() else [])
     files = [path for path in candidates if path.exists()]
     manifest = {
-        "schema_version": "0.3.4",
+        "schema_version": "0.4.0",
         "files": [
             {"name": ("replay_analysis.json" if path == replay_json else str(path.relative_to(out_dir))), "size": path.stat().st_size, "sha256": sha256(path)}
             for path in files
@@ -171,11 +188,16 @@ def main() -> int:
     args = parser.parse_args()
     battle_path = args.out / "battle_analysis.json"
     coaching_path = args.out / "coaching_analysis.json"
+    strategic_path = args.out / "strategic_analysis.json"
     battle_data = load_json(battle_path)
     coaching_data = load_json(coaching_path) if coaching_path.exists() else None
+    strategic_data = load_json(strategic_path) if strategic_path.exists() else None
     diagnostic_data = diagnostics(battle_data)
     (args.out / "diagnostics.json").write_text(json.dumps(diagnostic_data, ensure_ascii=False, indent=2), encoding="utf-8")
-    (args.out / "review_summary.md").write_text(summary_markdown(battle_data, coaching_data, diagnostic_data), encoding="utf-8")
+    (args.out / "review_summary.md").write_text(
+        summary_markdown(battle_data, coaching_data, strategic_data, diagnostic_data),
+        encoding="utf-8",
+    )
     zip_path = bundle(args.out, args.replay_json)
     print(zip_path)
     return 0
