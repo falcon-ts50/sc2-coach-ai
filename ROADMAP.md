@@ -2,189 +2,182 @@
 
 ## Vision
 
-SC2 Coach is an open-source StarCraft II replay analysis system focused on explaining why games were won or lost, not merely displaying statistics.
+SC2 Coach explains why a StarCraft II match changed and what a player can try differently next time. It is not merely a replay-statistics viewer.
 
-Every conclusion should be:
+The product evaluates decisions, not people. Every conclusion should be:
 
 - reproducible from replay-derived facts;
-- explainable to the player;
+- explainable with timestamps and evidence;
+- honest about uncertainty;
 - deterministic in the core analysis pipeline;
-- usable offline through the CLI;
-- reusable by future web and API surfaces.
+- available only after explicit replay upload or CLI invocation;
+- reusable by web, Markdown and future API consumers.
 
-## Architecture
+Optional AI may later turn structured facts into richer prose, but it must not replace the evidence-producing core.
+
+## Product horizons
+
+### NOW — deploy and test the free MVP
+
+Completed:
+
+- replay decoding with `sc2reader` and Blizzard `s2protocol`;
+- versioned machine-readable replay output;
+- Java 25 domain model;
+- relative player context for economy, army and supply;
+- lead history and measured match leader;
+- first decision detectors;
+- turning-point detection;
+- Knowledge Engine and typed recommendations;
+- confidence and evidence;
+- Coach Feed;
+- React upload-and-report interface;
+- Markdown download;
+- single-container deployment;
+- hardened upload and runtime security.
+
+Immediate validation work:
+
+- deploy the current `main` behind HTTPS;
+- process a diverse real-replay corpus;
+- record decoder failures and false conclusions;
+- verify 1v1 and team-game behaviour separately;
+- improve the density and usefulness of the report before adding infrastructure-heavy features.
+
+### NEXT — richer deterministic match understanding
+
+#### Readable replay transcript
+
+Produce a chronological, human- and AI-readable representation of the match. It should include, where available:
+
+- players, teams, races, results and MMR;
+- unit and structure creation/completion;
+- upgrades and technology milestones;
+- commands, targets and ability use;
+- deaths and ownership changes;
+- periodic economy, army, supply and resource snapshots;
+- engagements and detected decisions;
+- camera events;
+- unit, target and event coordinates exposed by the replay protocol.
+
+The transcript must distinguish facts, derived events and heuristics. Spatial data must retain timestamp, player, entity identity and coordinate semantics.
+
+#### Argument-delta analysis
+
+Move from sparse final scores to explicit changes over intervals:
+
+- worker and income deltas;
+- army-value and army-loss deltas;
+- supply and production deltas;
+- resource-bank growth or spending windows;
+- before/after context around decisions and turning points;
+- teammate synchronization in team games;
+- recovery time after major losses;
+- whether an advantage was converted or allowed to decay.
+
+This is the primary path to reports that approach a human coaching review without requiring an LLM.
+
+#### Report and UI improvements
+
+- denser Coach Feed;
+- expandable evidence;
+- timeline charts;
+- relative economy and army curves;
+- better team comparison;
+- improved Markdown structure;
+- localization through a stable message catalogue;
+- operational metrics and clearer user-facing errors.
+
+### LATER — data-backed Pro features
+
+These features require persistence, a replay corpus or substantially more compute:
+
+- accounts and replay history;
+- personal progress and recurring weakness detection;
+- build-order comparison against curated references;
+- league-, MMR- and matchup-specific baselines;
+- professional replay reference packs;
+- replay and state similarity search;
+- vector database;
+- counterfactual decision analysis;
+- probabilistic outcome estimates with calibrated confidence;
+- personalized learning plans;
+- billing and resource quotas.
+
+The free product should remain useful without these features.
+
+## Current architecture
 
 ```text
-SC2Replay
-    |
-    v
-Replay Decoder
-    |
-    v
-Replay Analysis Model
-    |
-    +-------------------+
-    |                   |
-    v                   v
-Engagement Engine   Strategic Engine
-    |                   |
-    +---------+---------+
-              |
-              v
-         Report Model
-        /      |      \
-       v       v       v
-     JSON      PDF     HTML
+.SC2Replay
+    -> Python decoder
+    -> replay_analysis.json
+    -> Java domain model
+    -> Context Engine
+    -> Decision Engine
+    -> Turning Point Engine
+    -> Knowledge Engine
+    -> Coach Feed
+    -> REST
+    -> React / Markdown
 ```
 
-JSON remains the machine-readable source of truth. Markdown, PDF, HTML, and future UI views are renderings of the same report model.
+See `ARCHITECTURE.md` for module boundaries and deployment details.
 
 ## Design principles
 
 ### Evidence before advice
 
-Every recommendation must include the facts that caused it, such as timestamps, resource values, army-value changes, worker losses, or engagement outcomes.
+A recommendation without evidence is incomplete.
 
-### Stable machine contracts
+### Facts, derivations and hypotheses are different
 
-JSON field names, categories, severities, metrics, and rule identifiers remain language-independent and stable across renderers.
+Direct replay events, deterministic calculations and heuristics must carry distinct confidence semantics.
 
 ### Explicit processing
 
-A replay is analyzed only after a user explicitly supplies or uploads it. Background directory watching is not a product goal.
+No in-game monitoring or background directory watch is required. A replay is processed only after the user explicitly uploads or supplies it.
 
 ### Deterministic core
 
-The core engine must not depend on nondeterministic LLM output. Optional AI interpretation may be added later as a separate layer over structured evidence.
+Core conclusions must not depend on nondeterministic LLM output. AI narrative generation may consume the structured transcript later.
 
-### Separation of concerns
+### Product-first architecture
 
-Replay decoding, engagement detection, strategic rules, report composition, and output rendering must remain independent modules.
+A new abstraction is justified only when it improves the current report, removes real duplication or makes a useful rule easier to test.
 
-## Version roadmap
+### Stateless free MVP
 
-### Completed
+The public MVP does not require accounts, persistent replay storage or a database.
 
-- **v0.1 — Replay Decoder:** structured replay extraction.
-- **v0.2 — Charts:** economy, army, income, bank, and loss visualizations.
-- **v0.3 — Engagement Engine:** battles, skirmishes, harassment, segmentation, and diagnostics.
-- **v0.4 — Coach Engine:** explainable strategic rules with English and Russian reports.
+### Security is part of the product
 
-### v0.5 — Professional Report Engine
+Uploaded replay files are untrusted input. Validation, timeouts, concurrency controls and container isolation are required features, not deployment afterthoughts.
 
-**Goal:** produce a polished, coach-ready PDF from the existing analysis outputs.
+## Rule-extension direction
 
-**Definition of Done**
+New strategic knowledge should be added through typed Java `KnowledgeRule` implementations. A rule should produce a structured recommendation with category, priority, confidence, explanation, next action and evidence.
 
-- a renderer-independent `ReportDocument` model;
-- deterministic PDF generation;
-- English and Russian output;
-- cover page and match metadata;
-- executive summary;
-- strategic findings and coach plan;
-- engagement summary and tables;
-- embedded high-resolution charts;
-- table of contents and page numbering;
-- PDF included in the review bundle;
-- tests for report composition and basic PDF generation.
+Race- and strategy-specific packs may be added later, but YAML DSLs and generic plugin frameworks are deferred until real rules demonstrate the need.
 
-**Future extensions**
+## Non-goals for the current MVP
 
-- HTML renderer using the same report model;
-- compact four-page report mode;
-- shareable replay-card PNG.
+SC2 Coach does not currently aim to:
 
-### v0.6 — Build Order Intelligence
+- analyze games while they are being played;
+- retain replay history;
+- claim precise win probabilities;
+- infer coordinates or intent absent from replay data;
+- hide evidence behind recommendations;
+- use an LLM as the deterministic decision engine;
+- replace professional coaching.
 
-**Goal:** compare a player's build against curated reference replays.
+## Definition of Done for analysis features
 
-**Definition of Done**
+An analytical change is complete only when:
 
-- versioned reference-pack format;
-- matching by race, matchup, map context, and opening family;
-- comparison of structures, upgrades, workers, army milestones, and key units;
-- configurable timing tolerances;
-- phase-based similarity score;
-- evidence-backed explanations of material deviations;
-- support for professional, league-average, and custom reference packs.
-
-### v0.7 — Personal Replay Database
-
-**Goal:** compare current performance with the player's own historical games.
-
-**Definition of Done**
-
-- local replay index and metadata database;
-- personal baselines by race and matchup;
-- trend charts for macro, timings, engagements, and outcomes;
-- comparison against recent wins and personal best games;
-- regression detection and improvement tracking.
-
-### v1.0 — Coach Portal
-
-**Goal:** provide an explicit upload-and-analyze web workflow.
-
-**Definition of Done**
-
-- replay upload;
-- player selection;
-- analysis job execution;
-- browser report and charts;
-- PDF download;
-- replay history;
-- safe resource limits and file validation.
-
-## Reference packs
-
-Reference data should be versioned and auditable.
-
-```text
-references/
-  terran/
-    tvt/
-      battlecruiser/
-        manifest.json
-        replays/
-        profiles/
-```
-
-A manifest should record source, patch, league or player, matchup, map, replay checksum, extraction schema, and licensing or redistribution constraints.
-
-## Plugin direction
-
-Future race- or strategy-specific rules should implement a stable interface rather than modifying the core engine directly.
-
-Conceptual API:
-
-```python
-class CoachRule:
-    rule_id: str
-
-    def applies(self, context) -> bool: ...
-    def evaluate(self, context): ...
-```
-
-Potential plugins include inject efficiency, chrono usage, marine splitting, Battlecruiser control, scouting quality, drop defense, and race-specific build-order rules.
-
-## Non-goals
-
-SC2 Coach does not aim to:
-
-- predict winners using opaque probabilities;
-- process replays without explicit user action;
-- invent events or intent not supported by replay data;
-- hide the evidence behind recommendations;
-- replace professional coaching;
-- make an LLM part of the deterministic analysis core.
-
-## Future ideas
-
-- opening recognition;
-- scouting evaluation;
-- cheese detection;
-- camera and attention analysis;
-- spatial engagement clustering;
-- drop and harassment analysis;
-- APM and command-efficiency heatmaps;
-- optional AI narrative generation over structured evidence;
-- replay search and cohort analysis.
+- CI passes;
+- the conclusion has evidence and confidence;
+- the browser or Markdown report becomes more useful;
+- user-facing wording does not overstate causality;
+- the feature has been checked against real replays, including cases where it should not fire.
