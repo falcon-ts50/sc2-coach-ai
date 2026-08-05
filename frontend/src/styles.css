@@ -141,7 +141,10 @@ main {
 .grid-line { stroke: #23415d; stroke-width: 1; }
 .phase-band { fill: #74d7ff; opacity: .06; }
 .phase-band.active { opacity: .18; }
-.marker-line { stroke: #ff8fab; stroke-width: 1; stroke-dasharray: 4 4; }
+.marker-line { stroke: #ffb2c5; stroke-width: 2; stroke-dasharray: 4 4; cursor: pointer; }
+.marker-line.active { stroke: #ffffff; stroke-width: 3; }
+.crosshair-line { stroke: #f7fbff; stroke-width: 1.5; stroke-dasharray: 2 5; }
+.crosshair-label { fill: #f7fbff; font-weight: 800; }
 .marker-label { fill: #b7c5d8; font-size: 12px; }
 .chart-legend { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 10px; color: #b7c5d8; font-size: 13px; }
 .chart-legend span { display: inline-flex; align-items: center; gap: 6px; }
@@ -162,6 +165,35 @@ main {
 .phase strong { font-size: 17px; }
 .phase span { color: #aebdd1; line-height: 1.45; }
 .phase.selected { border-color: #74d7ff; box-shadow: 0 0 0 1px #74d7ff55; }
+.evidence-legend {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 18px 0 14px;
+}
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 34px;
+  border: 1px solid #2d4a68;
+  border-radius: 999px;
+  padding: 7px 11px;
+  color: #e8f2ff;
+  background: #081522;
+  font-size: 13px;
+  font-weight: 800;
+}
+.legend-item i {
+  width: 22px;
+  height: 3px;
+  border-radius: 3px;
+  display: inline-block;
+}
+.legend-item small {
+  color: #b6c8dc;
+  font-weight: 700;
+}
 .causal-chain { margin-top: 22px; padding-top: 18px; border-top: 1px solid #243b53; }
 .causal-chain h3 { margin: 0 0 10px; font-size: 22px; }
 .causal-chain p { margin: 0 0 10px; color: #c9d7e8; line-height: 1.5; }
@@ -179,6 +211,89 @@ main {
 .combat-participants dl { display: grid; grid-template-columns: minmax(128px, 38%) 1fr; gap: 8px 12px; margin: 0; }
 .combat-participants dt { color: #7890aa; line-height: 1.35; }
 .combat-participants dd { margin: 0; color: #dbe7f5; line-height: 1.45; overflow-wrap: anywhere; }
+.combat-evidence {
+  display: grid;
+  gap: 14px;
+  margin-top: 18px;
+  padding: 16px;
+  border: 1px solid #2b4866;
+  border-radius: 14px;
+  background: #07131f;
+}
+.combat-side {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid #27425f;
+  border-radius: 12px;
+  background: #091724;
+}
+.combat-side h4, .participant-evidence h5 {
+  margin: 0;
+  color: #f0f7ff;
+}
+.combat-side small, .participant-evidence small {
+  color: #b8cce2;
+  font-size: 12px;
+  font-weight: 750;
+}
+.participant-evidence {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 10px;
+  background: #06101d;
+}
+.unit-table-wrap {
+  max-width: 100%;
+  overflow-x: auto;
+  border: 1px solid #243d57;
+  border-radius: 10px;
+}
+.unit-evidence-table {
+  width: 100%;
+  min-width: 620px;
+  border-collapse: collapse;
+  font-size: 13px;
+  color: #e7f2ff;
+}
+.unit-evidence-table caption {
+  padding: 9px 10px;
+  text-align: left;
+  color: #c8daed;
+  background: #0b1a29;
+  font-weight: 850;
+}
+.unit-evidence-table th, .unit-evidence-table td {
+  padding: 9px 10px;
+  border-top: 1px solid #1f344b;
+  text-align: right;
+  white-space: nowrap;
+}
+.unit-evidence-table th:first-child, .unit-evidence-table td:first-child { text-align: left; }
+.unit-evidence-table thead th {
+  color: #b9cde2;
+  background: #0d2031;
+}
+.unit-evidence-table tbody th small {
+  display: block;
+  margin-top: 3px;
+  color: #98afc8;
+  font-weight: 700;
+}
+.collateral-losses {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px 12px;
+  margin: 0;
+}
+.collateral-losses dt { color: #93a9c2; }
+.collateral-losses dd { margin: 0; color: #dbe7f5; overflow-wrap: anywhere; }
+.evidence-note {
+  margin: 0;
+  color: #b9cde2;
+  line-height: 1.5;
+}
 .story-row { display: grid; grid-template-columns: 72px 1fr; gap: 18px; padding: 20px 0; border-bottom: 1px solid #1f354b; }
 .story-row:last-child { border-bottom: 0; }
 .story-row small { display: block; margin-top: 9px; color: #748ba4; }
@@ -205,5 +320,6 @@ main {
   .combat-block { padding: 16px; }
   .combat-participants { grid-template-columns: 1fr; }
   .combat-participants dl, .summary-facts { grid-template-columns: 1fr; }
+  .collateral-losses { grid-template-columns: 1fr; }
   .combat-participants dt { margin-top: 8px; }
 }

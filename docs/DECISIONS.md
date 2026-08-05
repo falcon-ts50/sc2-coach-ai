@@ -133,3 +133,13 @@ Narrative Analysis is introduced as a backend-owned vertical slice that consumes
 The public report may show a preliminary verdict, phases, a principal chain and a match-overview chart, but the domain contract must preserve source references, confidence and limitations. Temporal order may support cautious links such as `PRECEDED` or `RECOVERED_FROM`; it must not be presented as proof of player intent, visibility, a forced winner, or a strategic result.
 
 Strategic result is explicitly out of scope for this slice and is serialized as `NOT_EVALUATED`.
+
+## ADR-015 — Narrative Evidence owns visualization-ready facts
+
+**Status:** Accepted
+
+Narrative evidence visualization is a backend-owned view model layered on top of existing Context, Narrative Analysis and Combat History outputs. The backend serializes participant identity, team relationship, chart series, focus intervals, combat side grouping, unit rows, reconciliation and completeness. React and Markdown render those fields; they must not infer teammate/opponent status, recompute combat totals, or reinterpret missing kill attribution.
+
+All participant metric graphs share the same match-time evidence basis and use stable identity across army value, economy proxy and occupied supply. The selected player is visually dominant, while teammates and opponents remain visible through subordinate line style and relationship labels so colour is not the only cue.
+
+Per-unit credited kills are only shown when replay/domain evidence exposes stable killer-unit identity. The current production combat DTO does not expose that identity, so kill credit is serialized and rendered as unavailable rather than zero. Combat additions keep ADR-012 semantics: units became available during the interval, without claiming local participation unless spatial evidence supports it.

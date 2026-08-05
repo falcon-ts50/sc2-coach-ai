@@ -10,6 +10,19 @@ java/**/target/
 results/
 replays/
 *.SC2Replay
+*support*.zip
+
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+id_rsa
+id_ed25519
+known_hosts
 
 .idea/
 .vscode/

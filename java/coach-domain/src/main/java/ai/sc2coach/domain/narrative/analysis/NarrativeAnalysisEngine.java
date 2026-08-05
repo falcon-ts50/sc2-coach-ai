@@ -12,6 +12,17 @@ import ai.sc2coach.domain.narrative.analysis.NarrativeChartModel.Interval;
 import ai.sc2coach.domain.narrative.analysis.NarrativeChartModel.Marker;
 import ai.sc2coach.domain.narrative.analysis.NarrativeChartModel.Point;
 import ai.sc2coach.domain.narrative.analysis.NarrativeChartModel.Series;
+import ai.sc2coach.domain.narrative.analysis.NarrativeEvidence.CombatEvidence;
+import ai.sc2coach.domain.narrative.analysis.NarrativeEvidence.CombatParticipantEvidence;
+import ai.sc2coach.domain.narrative.analysis.NarrativeEvidence.CombatSideEvidence;
+import ai.sc2coach.domain.narrative.analysis.NarrativeEvidence.CountEvidence;
+import ai.sc2coach.domain.narrative.analysis.NarrativeEvidence.EvidenceFocus;
+import ai.sc2coach.domain.narrative.analysis.NarrativeEvidence.FocusKind;
+import ai.sc2coach.domain.narrative.analysis.NarrativeEvidence.MetricComparison;
+import ai.sc2coach.domain.narrative.analysis.NarrativeEvidence.ParticipantIdentity;
+import ai.sc2coach.domain.narrative.analysis.NarrativeEvidence.ParticipantMetricSeries;
+import ai.sc2coach.domain.narrative.analysis.NarrativeEvidence.Relationship;
+import ai.sc2coach.domain.narrative.analysis.NarrativeEvidence.UnitEvidenceRow;
 
 import java.time.Duration;
 import java.util.ArrayList;
@@ -21,6 +32,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
+import java.util.TreeSet;
+import java.util.function.ToDoubleFunction;
+import java.util.stream.Collectors;
 
 public final class NarrativeAnalysisEngine {
 
@@ -52,6 +67,7 @@ public final class NarrativeAnalysisEngine {
         List<CausalLink> links = causalLinks(phases, transitions);
         NarrativeTimeline timeline = new NarrativeTimeline(events, snapshots, transitions, phases, links);
         NarrativeChartModel chart = chart(snapshots, phases, events);
+        NarrativeEvidence evidence = evidence(match, focus, snapshots, phases, events, input.combats());
         NarrativeSummary summary = summary(match, focus, team, phases, transitions, links);
 
         return new NarrativeAnalysis(
@@ -65,6 +81,7 @@ public final class NarrativeAnalysisEngine {
                 timeline,
                 summary,
                 chart,
+                evidence,
                 List.of(
                         "Narrative Analysis consumes existing deterministic engines and does not infer a strategic result.",
                         "Replay data does not prove intent or causality; causal links use cautious precedence/contribution language.",
@@ -445,6 +462,318 @@ public final class NarrativeAnalysisEngine {
                 intervals,
                 List.of("Economy and supply are context proxies; the replay response does not expose full base, queue or bank-spend series.")
         );
+    }
+
+    private NarrativeEvidence evidence(Match match, PlayerState focus, List<MatchStateSnapshot> snapshots,
+                                       List<MatchPhase> phases, List<NarrativeEvent> events, List<Combat> combats) {
+        List<ParticipantIdentity> participants = participantIdentities(match, focus);
+        return new NarrativeEvidence(
+                "narrative-evidence.v1",
+                participants,
+                metricComparisons(participants, snapshots),
+                evidenceFocuses(phases, events),
+                combatEvidence(combats, participants, focus),
+                List.of(
+                        "Kill credit is unavailable in this evidence model until the decoder/domain exposes stable killer-unit identity.",
+                        "Additions preserve ADR-012 semantics: units became available during the interval; local participation is not asserted without spatial evidence."
+                )
+        );
+    }
+
+    private List<ParticipantIdentity> participantIdentities(Match match, PlayerState focus) {
+        List<PlayerState> players = match.players().stream()
+                .sorted(participantOrder(focus))
+                .toList();
+        List<ParticipantIdentity> identities = new ArrayList<>();
+        int order = 0;
+        for (PlayerState player : players) {
+            Relationship relationship = relationship(player, focus);
+            identities.add(new ParticipantIdentity(
+                    participantId(player.name()),
+                    player.pid(),
+                    player.name(),
+                    player.team(),
+                    relationship,
+                    relationship == Relationship.SELECTED,
+                    styleKey(player, relationship),
+                    order++
+            ));
+        }
+        return List.copyOf(identities);
+    }
+
+    private Comparator<PlayerState> participantOrder(PlayerState focus) {
+        return Comparator
+                .comparingInt((PlayerState player) -> relationshipOrder(relationship(player, focus)))
+                .thenComparing(player -> player.team() == null ? Integer.MAX_VALUE : player.team())
+                .thenComparingInt(PlayerState::pid)
+                .thenComparing(PlayerState::name);
+    }
+
+    private int relationshipOrder(Relationship relationship) {
+        return switch (relationship) {
+            case SELECTED -> 0;
+            case TEAMMATE -> 1;
+            case OPPONENT -> 2;
+            case UNKNOWN -> 3;
+        };
+    }
+
+    private Relationship relationship(PlayerState player, PlayerState focus) {
+        if (player.pid() == focus.pid()) return Relationship.SELECTED;
+        if (player.team() == null || focus.team() == null) return Relationship.UNKNOWN;
+        return Objects.equals(player.team(), focus.team()) ? Relationship.TEAMMATE : Relationship.OPPONENT;
+    }
+
+    private String participantId(String playerName) {
+        return "participant-" + slug(playerName);
+    }
+
+    private String styleKey(PlayerState player, Relationship relationship) {
+        return relationship.name().toLowerCase() + "-team-" + (player.team() == null ? "unknown" : player.team())
+                + "-pid-" + player.pid();
+    }
+
+    private List<MetricComparison> metricComparisons(List<ParticipantIdentity> participants, List<MatchStateSnapshot> snapshots) {
+        return List.of(
+                metricComparison("armyValue", "Стоимость армии", "resources", "MatchContext.playerMetrics.armyValue",
+                        Completeness.COMPLETE, participants, snapshots, MatchStateSnapshot.Metrics::armyValue),
+                metricComparison("economyProxy", "Экономика", "proxy", "MatchContext.playerMetrics.economyProxy",
+                        Completeness.PARTIAL, participants, snapshots, MatchStateSnapshot.Metrics::economyProxy),
+                metricComparison("supplyUsed", "Занятый лимит", "supply", "MatchContext.playerMetrics.supplyUsed",
+                        Completeness.PARTIAL, participants, snapshots, MatchStateSnapshot.Metrics::supplyUsed)
+        );
+    }
+
+    private MetricComparison metricComparison(String id, String label, String unit, String source, Completeness baseline,
+                                              List<ParticipantIdentity> participants, List<MatchStateSnapshot> snapshots,
+                                              ToDoubleFunction<MatchStateSnapshot.Metrics> value) {
+        List<ParticipantMetricSeries> series = participants.stream()
+                .map(participant -> participantSeries(id, participant, snapshots, value))
+                .toList();
+        Completeness completeness = series.stream().anyMatch(item -> item.completeness() == Completeness.UNAVAILABLE)
+                ? Completeness.PARTIAL
+                : baseline;
+        return new MetricComparison(id, label, unit, source, completeness, series);
+    }
+
+    private ParticipantMetricSeries participantSeries(String metricId, ParticipantIdentity participant,
+                                                      List<MatchStateSnapshot> snapshots,
+                                                      ToDoubleFunction<MatchStateSnapshot.Metrics> value) {
+        List<Point> points = new ArrayList<>();
+        for (MatchStateSnapshot snapshot : snapshots) {
+            MatchStateSnapshot.Metrics metrics = snapshot.playerMetrics().get(participant.displayName());
+            if (metrics == null) continue;
+            points.add(new Point(snapshot.at(), value.applyAsDouble(metrics)));
+        }
+        Completeness completeness = points.isEmpty()
+                ? Completeness.UNAVAILABLE
+                : points.size() == snapshots.size() ? Completeness.COMPLETE : Completeness.PARTIAL;
+        String lineStyle = switch (participant.relationship()) {
+            case SELECTED -> "solid";
+            case TEAMMATE -> "dashed";
+            case OPPONENT -> "dotted";
+            case UNKNOWN -> "dashdot";
+        };
+        int strokeWeight = participant.selected() ? 5 : 3;
+        return new ParticipantMetricSeries(metricId + "-" + participant.id(), participant.id(),
+                completeness, lineStyle, strokeWeight, points);
+    }
+
+    private List<EvidenceFocus> evidenceFocuses(List<MatchPhase> phases, List<NarrativeEvent> events) {
+        List<EvidenceFocus> focuses = new ArrayList<>();
+        phases.forEach(phase -> focuses.add(new EvidenceFocus("focus-" + phase.id(), FocusKind.PHASE,
+                phase.title(), phase.startedAt(), phase.startedAt(), phase.endedAt(), phase.id())));
+        events.forEach(event -> focuses.add(new EvidenceFocus("focus-" + event.id(), focusKind(event.kind()),
+                event.title(), event.at(), event.at(), event.endedAt(), event.id())));
+        return focuses.stream()
+                .sorted(Comparator.comparing(EvidenceFocus::at)
+                        .thenComparing(focus -> focusKindOrder(focus.kind()))
+                        .thenComparing(EvidenceFocus::sourceId))
+                .toList();
+    }
+
+    private FocusKind focusKind(NarrativeEvent.Kind kind) {
+        return switch (kind) {
+            case COMBAT -> FocusKind.COMBAT;
+            case TURNING_POINT -> FocusKind.TURNING_POINT;
+            default -> FocusKind.NARRATIVE_EVENT;
+        };
+    }
+
+    private int focusKindOrder(FocusKind kind) {
+        return switch (kind) {
+            case PHASE -> 0;
+            case COMBAT -> 1;
+            case TURNING_POINT -> 2;
+            case NARRATIVE_EVENT -> 3;
+        };
+    }
+
+    private List<CombatEvidence> combatEvidence(List<Combat> combats, List<ParticipantIdentity> identities, PlayerState focus) {
+        Map<String, ParticipantIdentity> byName = identities.stream()
+                .collect(Collectors.toMap(ParticipantIdentity::displayName, identity -> identity, (left, right) -> left, LinkedHashMap::new));
+        List<CombatEvidence> result = new ArrayList<>();
+        int index = 1;
+        for (Combat combat : combats) {
+            Map<Integer, List<CombatParticipantEvidence>> byTeam = new LinkedHashMap<>();
+            for (Combat.Participant participant : combat.participants()) {
+                ParticipantIdentity identity = byName.get(participant.player());
+                Integer team = identity == null ? null : identity.teamId();
+                byTeam.computeIfAbsent(team == null ? Integer.MAX_VALUE : team, ignored -> new ArrayList<>())
+                        .add(combatParticipantEvidence(participant, identity));
+            }
+            List<CombatSideEvidence> sides = byTeam.entrySet().stream()
+                    .sorted(Map.Entry.comparingByKey(sideOrder(focus.team())))
+                    .map(entry -> combatSideEvidence(entry.getKey(), entry.getValue(), focus.team()))
+                    .toList();
+            Completeness completeness = sides.stream().anyMatch(side -> side.completeness() != Completeness.COMPLETE)
+                    ? Completeness.PARTIAL
+                    : Completeness.COMPLETE;
+            result.add(new CombatEvidence(
+                    combat.id(),
+                    combat.ordinalLabel() == null ? "Бой " + index : combat.ordinalLabel(),
+                    combat.startedAt(),
+                    combat.endedAt(),
+                    completeness,
+                    sides,
+                    List.of("Credited kills are marked unknown because current Combat evidence does not expose killer-unit identity.")
+            ));
+            index++;
+        }
+        return List.copyOf(result);
+    }
+
+    private Comparator<Integer> sideOrder(Integer focusTeam) {
+        return Comparator
+                .comparingInt((Integer team) -> Objects.equals(team, focusTeam) ? 0 : team == Integer.MAX_VALUE ? 2 : 1)
+                .thenComparingInt(Integer::intValue);
+    }
+
+    private CombatParticipantEvidence combatParticipantEvidence(Combat.Participant participant, ParticipantIdentity identity) {
+        String participantId = identity == null ? participantId(participant.player()) : identity.id();
+        List<UnitEvidenceRow> rows = unitRows(participant);
+        Completeness completeness = participant.reconciliationStatus() == Combat.ReconciliationStatus.EXACT
+                ? Completeness.COMPLETE
+                : Completeness.PARTIAL;
+        List<String> issues = participant.reconciliationIssues().stream()
+                .map(issue -> issue.unit() + ": " + issue.startCount() + " + " + issue.additions()
+                        + " - " + issue.losses() + " = " + issue.expectedEndCount()
+                        + ", actual " + issue.actualEndCount())
+                .toList();
+        return new CombatParticipantEvidence(
+                participantId,
+                participant.player(),
+                completeness,
+                rows,
+                participant.workersLost(),
+                participant.structuresLost(),
+                participant.staticDefenseLost(),
+                participant.reconciliationStatus().name(),
+                issues
+        );
+    }
+
+    private List<UnitEvidenceRow> unitRows(Combat.Participant participant) {
+        Set<String> units = new TreeSet<>();
+        units.addAll(participant.armyBefore().keySet());
+        units.addAll(participant.additions().keySet());
+        units.addAll(participant.unitsLost().keySet());
+        units.addAll(participant.armyAfter().keySet());
+        List<UnitEvidenceRow> rows = new ArrayList<>();
+        for (String unit : units) {
+            boolean exact = participant.reconciliationStatus() == Combat.ReconciliationStatus.EXACT
+                    && participant.reconciliationIssues().stream().noneMatch(issue -> issue.unit().equals(unit));
+            rows.add(new UnitEvidenceRow(
+                    unit,
+                    count(participant.armyBefore(), unit),
+                    count(participant.additions(), unit),
+                    count(participant.unitsLost(), unit),
+                    count(participant.armyAfter(), unit),
+                    CountEvidence.unknown("Killer-unit identity is not available in current replay combat evidence; unknown is not zero."),
+                    exact ? Completeness.COMPLETE : Completeness.PARTIAL,
+                    exact ? "EXACT" : "PARTIAL"
+            ));
+        }
+        return List.copyOf(rows);
+    }
+
+    private CombatSideEvidence combatSideEvidence(Integer teamKey, List<CombatParticipantEvidence> participants, Integer focusTeam) {
+        Integer teamId = teamKey == Integer.MAX_VALUE ? null : teamKey;
+        Relationship relationship = teamId == null ? Relationship.UNKNOWN
+                : Objects.equals(teamId, focusTeam) ? Relationship.TEAMMATE : Relationship.OPPONENT;
+        List<UnitEvidenceRow> totals = totalRows(participants);
+        Map<String, Integer> workers = sumLosses(participants, CombatParticipantEvidence::workerLosses);
+        Map<String, Integer> structures = sumLosses(participants, CombatParticipantEvidence::structureLosses);
+        Map<String, Integer> defense = sumLosses(participants, CombatParticipantEvidence::staticDefenseLosses);
+        Completeness completeness = participants.stream().anyMatch(participant -> participant.completeness() != Completeness.COMPLETE)
+                ? Completeness.PARTIAL
+                : Completeness.COMPLETE;
+        String label = relationship == Relationship.TEAMMATE ? "Команда фокуса"
+                : relationship == Relationship.OPPONENT ? "Соперники"
+                : "Неизвестная сторона";
+        return new CombatSideEvidence(
+                teamId == null ? "side-unknown" : "team-" + teamId,
+                label,
+                teamId,
+                relationship,
+                completeness,
+                totals,
+                workers,
+                structures,
+                defense,
+                participants
+        );
+    }
+
+    private List<UnitEvidenceRow> totalRows(List<CombatParticipantEvidence> participants) {
+        Set<String> units = participants.stream()
+                .flatMap(participant -> participant.rows().stream().map(UnitEvidenceRow::unit))
+                .collect(Collectors.toCollection(TreeSet::new));
+        List<UnitEvidenceRow> rows = new ArrayList<>();
+        for (String unit : units) {
+            int start = 0;
+            int additions = 0;
+            int losses = 0;
+            int end = 0;
+            boolean partial = false;
+            for (CombatParticipantEvidence participant : participants) {
+                for (UnitEvidenceRow row : participant.rows()) {
+                    if (!row.unit().equals(unit)) continue;
+                    start += row.startCount();
+                    additions += row.additions();
+                    losses += row.losses();
+                    end += row.endCount();
+                    partial |= row.completeness() != Completeness.COMPLETE;
+                }
+            }
+            rows.add(new UnitEvidenceRow(unit, start, additions, losses, end,
+                    CountEvidence.unknown("Team-level credited kills are unavailable without killer-unit attribution."),
+                    partial ? Completeness.PARTIAL : Completeness.COMPLETE,
+                    partial ? "PARTIAL" : "EXACT"));
+        }
+        return List.copyOf(rows);
+    }
+
+    private Map<String, Integer> sumLosses(List<CombatParticipantEvidence> participants,
+                                           java.util.function.Function<CombatParticipantEvidence, Map<String, Integer>> mapper) {
+        Map<String, Integer> result = new LinkedHashMap<>();
+        for (CombatParticipantEvidence participant : participants) {
+            mapper.apply(participant).forEach((unit, count) -> result.merge(unit, count, Integer::sum));
+        }
+        return result;
+    }
+
+    private int count(Map<String, Integer> value, String key) {
+        return value.getOrDefault(key, 0);
+    }
+
+    private String slug(String value) {
+        return value == null || value.isBlank()
+                ? "unknown"
+                : value.toLowerCase()
+                        .replaceAll("[^a-z0-9]+", "-")
+                        .replaceAll("(^-|-$)", "");
     }
 
     private NarrativeChartModel.Kind markerKind(NarrativeEvent.Kind kind) {
