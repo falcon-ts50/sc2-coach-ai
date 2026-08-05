@@ -1,0 +1,21 @@
+name: main-source-guard
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, edited]
+
+permissions:
+  contents: read
+
+jobs:
+  guard:
+    name: main source guard
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require develop as the source branch
+        run: |
+          if [ "${{ github.head_ref }}" != "develop" ]; then
+            echo "::error::Pull requests into main must come from develop. Merge feature branches into develop first."
+            exit 1
+          fi

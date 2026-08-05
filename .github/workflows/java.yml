@@ -2,19 +2,8 @@ name: java
 
 on:
   pull_request:
-    paths:
-      - 'java/**'
-      - 'frontend/**'
-      - 'contracts/**'
-      - 'Dockerfile'
-      - '.github/workflows/java.yml'
   push:
-    branches: [main]
-    paths:
-      - 'java/**'
-      - 'frontend/**'
-      - 'contracts/**'
-      - 'Dockerfile'
+    branches: [main, develop]
 
 jobs:
   test:
