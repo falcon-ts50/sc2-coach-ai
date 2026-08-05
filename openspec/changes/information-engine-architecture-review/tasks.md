@@ -1,4 +1,4 @@
-# Tasks — Information Engine Architecture Review
+# Tasks - Information Engine Architecture Review
 
 ## Gate
 
@@ -6,69 +6,71 @@ This change authorizes `REVIEW` only. Do not modify production code.
 
 ## 1. Read gate
 
-- [ ] 1.1 Read every mandatory source listed in `openspec/AGENTS.md`.
-- [ ] 1.2 Identify the current Information Engine branch or PR and exact commit reviewed.
-- [ ] 1.3 Inspect the reference support bundle behaviour described in `design.md` or obtain equivalent repository evidence.
-- [ ] 1.4 Post the Read Gate report before editing any review artifact.
-
-Acceptance: the report names all files read, branch/commit, scope, non-goals, contradictions, available replay evidence and next action.
+- [x] 1.1 Read every mandatory source listed in `openspec/AGENTS.md`.
+  - Evidence: read `openspec/AGENTS.md`, `openspec/project.md`, `docs/PROJECT_STATE.md`, `docs/DECISIONS.md`, `ROADMAP.md`, `ARCHITECTURE.md`, all files under `openspec/changes/information-engine-architecture-review/`, relevant implementation/tests, and PR state for #63/#66.
+- [x] 1.2 Identify the current Information Engine branch or PR and exact commit reviewed.
+  - Evidence: current implementation is merged PR #63 (`agent/information-engine-v1` -> `develop`), head commit `4bf4322fbeb1cc18a22a13b71851c74de7f9a316`, merge commit `8e3728b1b083c44efc48aadbd8ca67efb50586a5`, current `origin/develop` `5fc9150251d418811f7c5d2dc515fb6d83a56858`.
+- [x] 1.3 Post the Read Gate report before editing any review artifact.
+  - Evidence: Read Gate report sent in Telegram before modifying `design.md`, `spec.md` or `tasks.md`.
 
 ## 2. Repository evidence
 
-- [ ] 2.1 Locate all Information Engine production code, tests, API contracts and documentation.
-- [ ] 2.2 Locate adjacent engine contracts that it consumes or duplicates.
-- [ ] 2.3 Locate decoder/transcript evidence for commands, targets, positions, scans, visibility, workers, production, upgrades, expansions, resources and combat boundaries.
-- [ ] 2.4 Determine what player-perspective scouting can be proven from current replay data and what cannot.
-- [ ] 2.5 Build a responsibility and dependency map with file/symbol references.
-- [ ] 2.6 Record unavailable evidence rather than inferring it.
-
-Acceptance: every material architectural claim is grounded in a repository path, symbol, test, PR diff or named support-bundle artifact.
+- [x] 2.1 Locate all Information Engine production code, tests, API contracts and documentation.
+  - Evidence: `java/coach-domain/src/main/java/ai/sc2coach/domain/information/*.java`; `java/coach-domain/src/test/java/ai/sc2coach/domain/information/InformationEngineTest.java`; no portal/frontend references found by `rg`; docs references in `docs/PROJECT_STATE.md:41`, `docs/DECISIONS.md:93`.
+- [x] 2.2 Locate adjacent engine contracts that it consumes or duplicates.
+  - Evidence: adjacent scouting detector in `java/coach-domain/src/main/java/ai/sc2coach/domain/scouting/ScoutingEpisodeDetector.java`; combat/narrative/portal wiring found in `AnalysisEngineConfiguration.java`, `AnalysisService.java`, `CoachFeedEngine.java`, `CombatEngine.java`, `CombatNarrativeEngine.java`.
+- [x] 2.3 Build a responsibility and dependency map with file/symbol references.
+  - Evidence: completed in `design.md` sections `Responsibility boundary` and `Integration map`.
+- [x] 2.4 Record unavailable evidence rather than inferring it.
+  - Evidence: `design.md` records unavailable real-replay validation and missing source event identities under deviations/open questions/test strategy.
 
 ## 3. Architecture review
 
-- [ ] 3.1 Complete the problem definition and responsibility boundary.
-- [ ] 3.2 Specify omniscient facts, observations, knowledge state and hypothesis semantics.
-- [ ] 3.3 Define strategic interval boundaries and explain alternatives.
-- [ ] 3.4 Define preparation-allocation categories for economy, army, production, technology, expansion, defence, information and banking/spending.
-- [ ] 3.5 Specify individual and team comparison semantics.
-- [ ] 3.6 Specify inputs, outputs, invariants and degradation behaviour.
-- [ ] 3.7 Classify stages as facts, deterministic derivations, heuristics or presentation transforms.
-- [ ] 3.8 Evaluate integration with all existing engines and module boundaries.
-- [ ] 3.9 Compare at least five architectural alternatives.
-- [ ] 3.10 Record deviations with severity and recommended ownership.
-
-Acceptance: `design.md` explains how the system can compare strategic preparation between fights and how it prevents omniscient information from being presented as player knowledge.
+- [x] 3.1 Complete the problem definition and responsibility boundary.
+  - Evidence: `design.md` sections `Problem definition` and `Responsibility boundary`.
+- [x] 3.2 Specify inputs, outputs, invariants and degradation behaviour.
+  - Evidence: `design.md` sections `Inputs`, `Outputs`, `Invariants`, and `Failure and degradation behaviour`.
+- [x] 3.3 Classify processing stages as facts, deterministic derivations, heuristics or presentation transforms.
+  - Evidence: `design.md` section `Processing model`.
+- [x] 3.4 Evaluate integration with existing engines and module boundaries.
+  - Evidence: `design.md` section `Integration map`.
+- [x] 3.5 Compare at least four architectural alternatives.
+  - Evidence: `design.md` section `Alternatives considered`.
+- [x] 3.6 Record deviations with severity and recommended ownership.
+  - Evidence: `design.md` section `Current implementation findings / Deviations`.
 
 ## 4. Capability specification
 
-- [ ] 4.1 Complete `specs/information-engine/spec.md` with normative requirements.
-- [ ] 4.2 Add scenarios for scouting, no scouting, stale information and incomplete visibility evidence.
-- [ ] 4.3 Add scenarios comparing immediate army investment with workers, production, expansion and delayed technology.
-- [ ] 4.4 Add team synchronization and non-combat interval scenarios.
-- [ ] 4.5 Add missing-data, contradiction and determinism scenarios.
-- [ ] 4.6 Ensure each requirement is testable and avoids unsupported intent claims.
+- [x] 4.1 Complete `specs/information-engine/spec.md` with normative requirements.
+  - Evidence: spec now defines independent responsibility, canonical inputs, versioned configuration, episode/observation/gap/reaction/state/evidence/determinism/compatibility/real-replay requirements.
+- [x] 4.2 Add positive, missing-data, contradiction and determinism scenarios.
+  - Evidence: scenarios include Roach Warren -> Bunker, no scouting, missing coordinates, scout death, repeated analysis determinism, REST compatibility and private replay validation.
+- [x] 4.3 Ensure each requirement is testable and avoids implementation-detail wording where possible.
+  - Evidence: requirements are written as SHALL statements with GIVEN/WHEN/THEN scenarios; implementation file names are limited to evidence in `design.md`, not normative behaviour except current canonical input.
 
-Acceptance: a future implementer can derive contracts and tests without Telegram history.
+## 5. Follow-up plan
 
-## 5. Current implementation assessment
+- [x] 5.1 Add concrete APPLY tasks required by the review, but leave them unchecked and clearly marked as not authorized.
+  - Evidence: see `Follow-up APPLY tasks (not authorized under REVIEW)` below.
+- [x] 5.2 Identify ADR, architecture, roadmap or project-state updates that would be required if the design is accepted.
+  - Evidence: follow-up tasks include ADR/spec synchronization and public integration documentation.
+- [x] 5.3 Summarize blockers, major findings and open questions in the PR description or review report.
+  - Evidence: `design.md` recommendation is `ACCEPT WITH REQUIRED CHANGES`; deviations and open questions are listed.
 
-- [ ] 5.1 Verify whether current code emits any explicit scouting/observation/knowledge-state output.
-- [ ] 5.2 Verify whether current code compares player investments between engagements.
-- [ ] 5.3 Verify whether combat outcome or army-loss scoring has incorrectly become the Information Engine's primary responsibility.
-- [ ] 5.4 Verify whether current output leaks omniscient enemy state into player-perspective conclusions.
-- [ ] 5.5 Classify the direction as acceptable, correctable or requiring redesign.
+## Follow-up APPLY tasks (not authorized under REVIEW)
 
-Acceptance: findings include exact code/test/report references and do not rely on absence from one UI view alone.
-
-## 6. Follow-up plan
-
-- [ ] 6.1 Add concrete APPLY tasks required by the review, left unchecked and explicitly unauthorized.
-- [ ] 6.2 Split follow-up work into decoder gaps, domain contracts, analysis logic, API/report integration and replay validation.
-- [ ] 6.3 Identify ADR, architecture, roadmap or project-state updates required if accepted.
-- [ ] 6.4 Summarize blockers, major findings and open questions in the PR description or review report.
-
-Acceptance: no production-code task is executed under this REVIEW change.
+- [ ] A.1 Add source-evidence references to `InformationEpisode`, `InformationObservation`, `InformationGap` and `InformationReaction`.
+- [ ] A.2 Introduce versioned `InformationEngineConfig` for scout units, thresholds, response windows, output limits and confidence weights.
+- [ ] A.3 Resolve overlap between `domain/scouting` and `domain/information` by deprecating, folding or reusing `ScoutingEpisodeDetector`.
+- [ ] A.4 Add target player/team scope to `InformationState` and `InformationAdvantage`.
+- [ ] A.5 Define whether `InformationNarrative` remains structured domain data or moves rendered prose to a narrative/presentation layer.
+- [ ] A.6 Add deterministic identity/order tests for repeated analysis.
+- [ ] A.7 Add missing-coordinate, missing-owner, ambiguous same-unit scout and multi-opponent team-game tests.
+- [ ] A.8 Validate against private real replay artifacts outside git and record outputs/deviations.
+- [ ] A.9 Before public integration, document REST/support-bundle compatibility and update `docs/PROJECT_STATE.md`, `docs/DECISIONS.md`, `ROADMAP.md` or `ARCHITECTURE.md` if the accepted architecture changes.
 
 ## Evidence log
 
-Add concise evidence beneath each completed task. Include commands, files, tests, support-bundle paths and PR/commit identifiers. Statements such as `reviewed` or `looks correct` are not evidence.
+- OpenSpec source branch: PR #66 `agent/openspec-workflow` -> `develop`, head `aef1e7e846b196831011325b4b4e7250609a7efc` before review updates.
+- Information implementation source: PR #63 merged into `develop`; head `4bf4322fbeb1cc18a22a13b71851c74de7f9a316`, merge `8e3728b1b083c44efc48aadbd8ca67efb50586a5`, reviewed from `origin/develop` `5fc9150251d418811f7c5d2dc515fb6d83a56858`.
+- Production code changes under this REVIEW: none.

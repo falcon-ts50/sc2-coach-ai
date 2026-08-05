@@ -2,239 +2,277 @@
 
 ## Status
 
-Draft for architecture review. Complete during the REVIEW gate; placeholders are not accepted requirements.
+Reviewed during `REVIEW` gate for `information-engine-architecture-review`.
+
+This specification defines the target capability contract. It does not authorize production code changes by itself.
 
 ## Purpose
 
-The Information Engine shall transform repository-defined replay and analysis inputs into structured, explainable information about what happened, what players could observe, and how they prepared over time. It shall support downstream deterministic analysis and presentation without inventing facts, player knowledge or intent.
+The Information Engine shall transform replay-derived domain inputs into structured, explainable information-state outputs without claiming complete player vision or causal intent.
 
 ## Requirements
 
-### Requirement: Explicit responsibility boundary
+### Requirement: Independent domain responsibility
 
-The Information Engine SHALL have a documented responsibility that does not duplicate replay decoding, combat detection, final combat outcome evaluation, turning-point detection, recommendation generation or presentation rendering.
+The Information Engine SHALL be owned by `java/coach-domain` and SHALL remain independent from Combat Engine, Combat Detector V3 and Combat Narrative.
 
-#### Scenario: Combat efficiency is proposed as the whole capability
+It SHALL answer information-state questions: what a player potentially could know, what remained missing, which later actions are response candidates, and how confident those conclusions are.
 
-- GIVEN an implementation describes Information Engine primarily as winner, loss or combat-efficiency scoring;
+It SHALL NOT own replay decoding, combat clustering, loss attribution, winner selection, recommendation generation, HTTP orchestration or frontend rendering.
+
+#### Scenario: Combat context consumes information
+
+- GIVEN a future Combat Engine or Knowledge Engine integration;
+- WHEN combat or recommendation logic needs scouting context;
+- THEN it MAY consume `InformationReport` output;
+- AND Information Engine SHALL NOT depend on combat output to produce information.
+
+#### Scenario: Adjacent responsibility is proposed
+
+- GIVEN a proposed Information Engine operation already belongs to decoder, context, decision, turning-point, combat, knowledge, narrative, portal or frontend layers;
 - WHEN the architecture is reviewed;
-- THEN the design is rejected or corrected because information acquisition and strategic preparation are required independent capabilities.
+- THEN the operation is rejected from Information Engine scope unless an ADR explicitly changes ownership.
 
-### Requirement: Omniscient fact and player knowledge separation
+### Requirement: Canonical input contract
 
-The Information Engine SHALL distinguish actual replay state from player-perspective observations and derived knowledge state.
+The Information Engine SHALL accept replay-derived domain input, currently `ReplayAnalysis`, plus a versioned configuration.
 
-#### Scenario: Enemy technology exists but was not observed
+`ReplayAnalysis.timeline` and `ReplayAnalysis.players` are canonical current inputs. Coordinates, owners, teams, timestamps, units, upgrades and attributes are optional unless a specific rule requires them.
 
-- GIVEN the replay proves that an enemy technology structure existed;
-- AND no supported observation proves the focus player or team saw it;
-- WHEN player-perspective information is produced;
-- THEN the technology is not presented as known to that player.
+#### Scenario: Input is null or empty
 
-#### Scenario: Visibility evidence is unavailable
+- GIVEN null analysis or an analysis with no usable timeline;
+- WHEN the engine processes it;
+- THEN it emits an empty report or unknown states;
+- AND it does not throw for ordinary missing replay data.
 
-- GIVEN the decoder does not expose enough data to prove that an entity was visible;
-- WHEN scouting analysis is produced;
-- THEN the engine records the limitation and does not promote proximity, camera position or omniscient existence to confirmed observation.
+#### Scenario: Optional coordinates are absent
 
-### Requirement: Structured observation evidence
+- GIVEN a timeline event without `position` or `target_position`;
+- WHEN a potential observation requires geometry;
+- THEN the engine SHALL omit that observation or emit an explicitly partial result with reduced confidence;
+- AND it SHALL NOT reconstruct coordinates.
 
-Every confirmed observation SHALL identify observer player or team, observed subject, timestamp or interval, evidence type, provenance and confidence.
+### Requirement: Versioned configuration
 
-#### Scenario: Scan reveals enemy assets
+Scout-unit registry, contact thresholds, potential-vision radius, response-window duration, output limits and confidence weights SHALL be represented as versioned configuration.
 
-- GIVEN supported replay evidence identifies a scan and entities revealed within its scope;
-- WHEN observations are built;
-- THEN the output attributes those observations to the scanning player or team with evidence references.
+#### Scenario: Default heuristics are used
 
-#### Scenario: Sacrificial scout enters enemy territory
+- GIVEN the engine uses default scout units or thresholds;
+- WHEN it emits a report;
+- THEN the output or diagnostics identify the configuration version sufficient to reproduce the result.
 
-- GIVEN supported movement, position and visibility evidence proves a scouting unit observed enemy assets before dying;
-- WHEN observations are built;
-- THEN the observed assets and scout event are represented separately from the scout's later combat loss.
+#### Scenario: Scout-unit list is extended
 
-### Requirement: Knowledge staleness
+- GIVEN a new scout unit is added;
+- WHEN the engine runs with the updated config;
+- THEN the new unit is recognized without changing unrelated engine logic.
 
-Knowledge derived from an observation SHALL preserve observation time and staleness rather than remaining permanently current.
+### Requirement: Episode contract
 
-#### Scenario: Enemy composition changes after scouting
+Each `InformationEpisode` SHALL include:
 
-- GIVEN a player observed an enemy composition at time T1;
-- AND the omniscient replay state changed later without a new supported observation;
-- WHEN knowledge is queried at T2;
-- THEN the previous information is marked stale or last-observed and the new composition is not treated as known.
+- stable episode id;
+- scout player;
+- target player and/or target team when known;
+- scout unit and unit identity when available;
+- start and end;
+- survived;
+- confidence;
+- source evidence references;
+- potentially observed items;
+- missing information;
+- response candidates.
 
-### Requirement: Strategic intervals
+#### Scenario: Scout enters opponent area
 
-The Information Engine SHALL represent bounded intervals suitable for comparing preparation choices, including intervals between engagements and intervals where no engagement occurs.
+- GIVEN a scout unit has replay-derived coordinates near an opponent area or opponent informative event;
+- WHEN contact starts;
+- THEN the engine emits an episode whose start is the first qualifying contact timestamp.
 
-#### Scenario: Two consecutive engagements exist
+#### Scenario: Scout dies
 
-- GIVEN reliable boundaries for engagement A and engagement B;
-- WHEN preparation analysis is performed;
-- THEN an interval between those boundaries is produced with explicit start/end semantics.
+- GIVEN a scout death can be attributed to the scout owner and unit identity or best available fallback;
+- WHEN the death bounds the scouting contact;
+- THEN the episode ends at the death timestamp;
+- AND `survived` is false;
+- AND confidence reflects death-bounded evidence and any identity ambiguity.
 
-#### Scenario: No clean engagement is detected
+#### Scenario: Scout leaves or contact ends
 
-- GIVEN meaningful macro and information changes occur without a reliable combat episode;
-- WHEN preparation analysis is performed;
-- THEN the capability can use another documented boundary strategy or explicitly report that no comparable interval was formed.
+- GIVEN no qualifying scout contact continues within the configured contact gap;
+- WHEN no matching death bounds the episode;
+- THEN the episode ends at the last contact plus configured expiry or an equivalent documented contact-end rule;
+- AND `survived` is true only if no scout death evidence was found.
 
-### Requirement: Explainable preparation allocation
+### Requirement: Potentially Observed contract
 
-For each supported player and team, interval changes SHALL be classified into explainable preparation categories.
+The engine SHALL use the term `Potentially Observed` for information that could have been visible from replay-derived geometry.
 
-At minimum the design SHALL evaluate economy, immediate army, production capacity, technology/upgrades, expansion, static defence, information acquisition and resource banking/spending.
+It SHALL NOT write or expose "Observed" as confirmed player vision unless a future decoder input provides exact vision evidence.
 
-#### Scenario: One player makes workers while another makes army
+Each `InformationObservation` SHALL include:
 
-- GIVEN player A increases worker/economic capacity;
-- AND player B increases immediately available combat forces in the same interval;
-- WHEN preparation is compared;
-- THEN the output describes the different investment horizons without declaring either choice universally superior.
+- stable observation id;
+- type/category;
+- subject;
+- target owner/team;
+- time;
+- coordinates when available;
+- distance or spatial relation when relevant;
+- derivation category;
+- confidence;
+- source evidence references.
 
-#### Scenario: Production is added before units appear
+#### Scenario: Technology is near scout path
 
-- GIVEN a player adds production capacity but the next army snapshot has not yet materially grown;
-- WHEN interval preparation is summarized;
-- THEN production investment is preserved as a distinct category rather than treated as no preparation.
+- GIVEN a scout episode and a nearby opponent technology event such as Roach Warren or Robotics Facility;
+- WHEN the event is inside the configured potential-vision geometry;
+- THEN the engine emits a `Potentially Observed` technology observation;
+- AND it records the source event and scout-position evidence.
 
-#### Scenario: Technology will mature after the next fight
+#### Scenario: Enemy event is far away
 
-- GIVEN a technology or upgrade starts during the interval but completes after the next engagement begins;
-- WHEN readiness is compared;
-- THEN the output distinguishes future investment from capability available at fight start.
+- GIVEN an opponent event outside the configured potential-vision geometry;
+- WHEN the engine evaluates potential observations;
+- THEN it SHALL NOT emit it as potentially observed.
 
-### Requirement: Team preparation comparison
+### Requirement: Missing Information contract
 
-Team-game output SHALL preserve individual choices while also supporting team-level synchronization analysis.
+The engine SHALL emit `Missing Information` when scouting ended early, lacked necessary coverage, had missing coordinates, or did not sample required categories.
 
-#### Scenario: Allies prepare on different horizons
+Each `InformationGap` SHALL include topic, target scope, reason, confidence and source evidence or missing-evidence references.
 
-- GIVEN one ally invests in immediate pressure and another invests in workers or technology;
-- WHEN team preparation is analysed;
-- THEN both individual allocations and their timing relationship are available downstream.
+#### Scenario: Scout dies early
 
-#### Scenario: Team attacks before an ally's power spike
+- GIVEN a scouting episode ends before the configured short-scout threshold;
+- WHEN expected categories were not sampled;
+- THEN the engine emits gaps such as Main Tech, Army Composition, Second Gas, Third Base or Tech Structure as applicable;
+- AND the episode confidence is reduced.
 
-- GIVEN an engagement starts before a teammate's documented upgrade, production cycle or army reinforcement completes;
-- WHEN synchronization is assessed;
-- THEN the timing mismatch may be emitted as a deterministic timing fact or heuristic hypothesis with explicit evidence and confidence.
+#### Scenario: Missing coordinates prevent coverage
 
-### Requirement: No unsupported intent claims
+- GIVEN scout or target events lack coordinates;
+- WHEN the engine cannot establish spatial coverage;
+- THEN it emits missing-information or reduced-confidence evidence instead of inferring coverage.
 
-The Information Engine SHALL NOT present inferred intent as fact.
+### Requirement: Response Candidate contract
 
-#### Scenario: Player builds workers after a fight
+The engine SHALL use `Response Candidate` for later player actions that are temporally and optionally semantically compatible with scouting information.
 
-- GIVEN worker production increases after an engagement;
-- WHEN strategic posture is inferred;
-- THEN the engine may describe economic investment or a likely delayed power horizon, but it does not claim the player's private plan.
+It SHALL NOT claim "decided because", "built because", or equivalent causal language.
+
+Each `InformationReaction` SHALL include:
+
+- stable reaction id;
+- acting player;
+- action type and subject;
+- time;
+- delay from episode end;
+- candidate basis;
+- related observation IDs when any;
+- derivation category;
+- confidence;
+- source action evidence references.
+
+#### Scenario: Potentially Observed Roach Warren then Bunker
+
+- GIVEN an episode with `Potentially Observed` Roach Warren;
+- AND the scout player starts or completes Bunker within the configured response window;
+- WHEN response candidates are evaluated;
+- THEN the engine emits `Response Candidate: Build Bunker`;
+- AND confidence reflects semantic match plus timing;
+- AND no causal claim is emitted.
+
+#### Scenario: No scouting occurred
+
+- GIVEN a replay with later defensive buildings but no scouting episode;
+- WHEN response candidates are evaluated;
+- THEN no Information Engine response candidates are emitted.
+
+#### Scenario: Action occurs outside response window
+
+- GIVEN an action occurs after the configured response window;
+- WHEN response candidates are evaluated;
+- THEN it SHALL NOT be emitted for that episode.
+
+### Requirement: Information State and Advantage
+
+The engine SHALL produce explainable `InformationState` entries for each relevant player and target scope.
+
+Knowledge states SHALL include `UNKNOWN` and `POTENTIALLY_KNOWN`. `KNOWN` SHALL only be emitted when a rule defines direct evidence sufficient for confirmed knowledge; otherwise it SHALL remain unused or be removed from the public contract.
+
+Information Advantage SHALL NOT be a single numeric score.
+
+#### Scenario: Player potentially knows opponent tech
+
+- GIVEN a player has a technology observation scoped to an opponent or opponent team;
+- WHEN Information State is built;
+- THEN that player's state for that target marks army tech as `POTENTIALLY_KNOWN`;
+- AND includes the observation evidence.
+
+#### Scenario: Team game with multiple opponents
+
+- GIVEN a team replay with more than one opponent;
+- WHEN Information State is built;
+- THEN target player/team scope is preserved;
+- AND observations from different opponents are not merged into an unscoped bucket.
 
 ### Requirement: Evidence traceability
 
-Every emitted information item SHALL reference sufficient replay-derived or deterministic source evidence to explain how it was produced.
+Every emitted episode, observation, gap and response candidate SHALL reference sufficient replay-derived or deterministic evidence to explain how it was produced.
 
-#### Scenario: Information is emitted from complete evidence
-
-- GIVEN valid source records required by an information rule;
-- WHEN the rule emits an information item;
-- THEN output identifies relevant timestamps, players/teams, source records and derivation category.
+Evidence references SHALL include at least replay timestamp, event type, player or team identity, subject and derivation category. When stable decoder event IDs or unit tags become available, they SHALL be used.
 
 #### Scenario: Evidence cannot be identified
 
-- GIVEN an output candidate whose support cannot be traced;
-- WHEN evaluated;
-- THEN it is not presented as a confirmed fact.
+- GIVEN an output candidate whose supporting event or derivation cannot be traced;
+- WHEN the engine evaluates it;
+- THEN the engine SHALL either omit it or mark it partial with reduced confidence and missing evidence.
 
 ### Requirement: Deterministic behaviour
 
-For identical versioned input and configuration, output SHALL be semantically identical.
+For identical versioned input and identical configuration, the Information Engine SHALL produce semantically identical output.
 
 #### Scenario: Analysis is repeated
 
-- GIVEN the same input, engine version and configuration;
+- GIVEN the same replay analysis input, engine version and configuration;
 - WHEN processing is repeated;
-- THEN identities, interval boundaries, ordering, values, confidence and evidence are semantically identical.
+- THEN information identities, ordering, values, confidence and evidence references are semantically identical.
 
 ### Requirement: Fact and inference separation
 
-The output SHALL distinguish direct facts, deterministic derivations and heuristic hypotheses.
+The Information Engine SHALL distinguish:
 
-#### Scenario: Strategic posture uses thresholds
+- direct replay facts;
+- deterministic derivations;
+- configurable heuristics;
+- presentation-only transformations.
 
-- GIVEN posture depends on configurable thresholds or incomplete behavioural interpretation;
-- WHEN emitted;
-- THEN category and confidence identify it as heuristic rather than direct fact.
+#### Scenario: A heuristic threshold is used
 
-### Requirement: Explicit missing-data degradation
-
-The engine SHALL NOT silently reconstruct missing coordinates, visibility, ownership, timestamps, resources, values or intent.
-
-#### Scenario: Required scouting data is missing
-
-- GIVEN source data required to confirm an observation is absent;
-- WHEN processing occurs;
-- THEN the engine omits the confirmed observation or emits an explicitly partial result with reduced confidence and missing-evidence details.
-
-#### Scenario: Production lifecycle is incomplete
-
-- GIVEN a structure or unit start/completion event is missing;
-- WHEN preparation deltas are calculated;
-- THEN the affected category is marked partial and does not fabricate completion timing.
-
-### Requirement: Stable attribution
-
-Information concerning players, teams, entities, upgrades or losses SHALL use repository-defined identity and ownership semantics.
-
-#### Scenario: Victim and killer differ
-
-- GIVEN a death event with different victim and killer owners;
-- WHEN loss-related information is produced;
-- THEN loss is attributed to the victim owner and killer identity is only participation evidence, consistent with ADR-006.
-
-### Requirement: Explainable aggregates
-
-The engine SHALL NOT expose an opaque universal score as evidence unless all components and calculation are available.
-
-#### Scenario: Preparation comparison uses a composite
-
-- GIVEN multiple preparation dimensions are summarized;
-- WHEN a composite is exposed;
-- THEN components, units, normalization and versioned calculation are available, and the raw dimensions remain accessible.
-
-### Requirement: Combat independence
-
-Information and preparation analysis SHALL remain useful when combat outcome is unknown, ambiguous or intentionally not evaluated.
-
-#### Scenario: Fight outcome is not determined
-
-- GIVEN an engagement is detected but no winner is assigned;
-- WHEN interval strategy is rendered;
-- THEN scouting, preparation allocation, readiness timing and player/team comparisons remain available.
+- GIVEN an information item depends on a radius, time window, contact gap or semantic match table;
+- WHEN the item is emitted;
+- THEN its derivation category and confidence reflect heuristic status rather than direct fact status.
 
 ### Requirement: Contract compatibility
 
-Any serialized replay-analysis, REST or report change SHALL be explicitly versioned or demonstrated backward compatible.
+Any change to serialized replay analysis, REST, Markdown, frontend or support-bundle contracts caused by Information Engine integration SHALL be explicitly versioned or demonstrated backward-compatible.
 
-#### Scenario: New information-state contract is added
+#### Scenario: REST field is added
 
-- GIVEN observations, knowledge states or preparation intervals are added to an existing response;
-- WHEN the design is reviewed;
-- THEN migration, optionality, defaults and support-bundle compatibility are documented before APPLY.
+- GIVEN `AnalysisResponse` adds an information field;
+- WHEN existing clients omit or ignore that field;
+- THEN the response remains backward-compatible or the API version/migration is documented.
 
-## Open specification items
+### Requirement: Real-replay validation
 
-The REVIEW must replace this section with repository-grounded decisions for:
+Before public report integration, the engine SHALL be validated on real replay artifacts outside git, with output artifacts or summaries that can be reviewed without committing private replays.
 
-- canonical input and output types;
-- observation proof rules for each available replay event type;
-- team information-sharing semantics;
-- knowledge expiry/staleness policy;
-- interval boundary algorithm;
-- investment-category accounting and overlap rules;
-- item identity and ordering;
-- confidence/evidence representation;
-- owning module/package and downstream consumers;
-- failure policy;
-- required tests and real-replay corpus.
+#### Scenario: Private replay corpus is used
+
+- GIVEN a private `.SC2Replay` sample;
+- WHEN Information Engine validation runs;
+- THEN the replay is not committed to git;
+- AND the validation records decoder schema, Information Engine output and deviations.
