@@ -89,3 +89,13 @@ Combat Detector V3 is introduced behind separate domain contracts before it repl
 The detector separates raw combat evidence extraction, spatial-temporal clustering, and final `Combat` assembly. Clustering uses configurable time and map-distance thresholds as explicit heuristics. Missing spatial data reduces confidence and is surfaced on the cluster rather than silently inferred.
 
 This staged approach keeps the live report stable while regression tests lock in the expected behaviour for simultaneous fights, team-game participants, and victim-owner attribution.
+
+## ADR-011 — Information Engine is independent from Combat Engine
+
+**Status:** Accepted
+
+Scouting and information analysis are owned by a separate Information Engine, not by Combat Engine or Combat Detector V3.
+
+The Information Engine answers what a player potentially could know, what information was missing, and which later actions are response candidates. Combat analysis may later consume this information as context, but information analysis must not depend on combat outcomes.
+
+Replay data does not contain a complete vision log or player intent. User-facing and narrative contracts therefore use `Potentially Observed` and `Response Candidate` language, never causal claims such as "the player saw" or "the player decided because".
