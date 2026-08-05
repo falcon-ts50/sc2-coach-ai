@@ -9,6 +9,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.nullable;
 import static org.mockito.BDDMockito.given;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -25,7 +26,7 @@ class ApiExceptionHandlerTest {
 
     @Test
     void returnsProblemDetailForInvalidUpload() throws Exception {
-        given(analysisService.analyze(any())).willThrow(new IllegalArgumentException("Expected a .SC2Replay file"));
+        given(analysisService.analyze(any(), nullable(String.class))).willThrow(new IllegalArgumentException("Expected a .SC2Replay file"));
         MockMultipartFile replay = new MockMultipartFile(
                 "replay", "notes.txt", "text/plain", new byte[]{1}
         );
