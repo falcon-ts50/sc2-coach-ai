@@ -5,6 +5,8 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 
+java/**/target/
+
 results/
 replays/
 *.SC2Replay
