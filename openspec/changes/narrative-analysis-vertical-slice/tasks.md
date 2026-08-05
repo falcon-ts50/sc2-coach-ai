@@ -77,14 +77,7 @@ Lifecycle gate for implementation: `APPLY`
 - [ ] Assert the structured narrative payload, chart series, phases, causal links and Markdown output without requiring a separate browser session.
 - [ ] Record material deviations in the implementation PR; do not weaken the expected semantics to match implementation output.
 
-## 10. General validation
-
-- [ ] Run Python tests.
-- [ ] Run Java/Maven verification with Java 25.
-- [ ] Run frontend tests/build.
-- [ ] Run OpenSpec validation for this change.
-- [ ] Run `git diff --check`.
-- [ ] Confirm the implementation PR targets `develop`.
+GitHub Actions executes all test suites and build jobs for this change. The implementation agent must add or update the required automated tests, but must not run local Python suites, Maven verification, frontend production builds or Docker image builds unless the user explicitly requests it.
 
 ## Expected result on the website
 
