@@ -51,7 +51,7 @@ function App() {
   }
 
   return <main>
-    <header className="hero"><div className="eyebrow">REPLAY INTELLIGENCE</div><h1>SC2 Coach</h1><p>Послематчевый разбор решений, боёв и переломных моментов.</p></header>
+    <header className="hero"><div className="eyebrow">REPLAY INTELLIGENCE</div><h1>SC2 Match Review</h1><p>Послематчевый разбор решений, боёв и переломных моментов.</p></header>
     <section className="panel upload-panel">
       <form onSubmit={analyze}>
         <label className="dropzone"><input type="file" accept=".SC2Replay" disabled={loading} onChange={e => setFile(e.target.files?.[0] || null)} /><strong>{file ? file.name : 'Выберите .SC2Replay'}</strong><span>Файл удаляется после анализа</span></label>
