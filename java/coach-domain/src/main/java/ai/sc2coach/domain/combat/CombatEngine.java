@@ -45,21 +45,24 @@ public final class CombatEngine {
                 .toList();
 
         var participantNames = new ArrayList<String>();
-        if (initiator != null) participantNames.add(initiator);
-        deaths.stream().map(event -> playerName(analysis, event.player()))
-                .filter(Objects::nonNull).distinct().forEach(participantNames::add);
+        addDistinct(participantNames, initiator);
+        deaths.forEach(event -> {
+            addDistinct(participantNames, deathOwnerName(analysis, event));
+            addDistinct(participantNames, killerName(analysis, event));
+        });
 
-        var distinctParticipants = participantNames.stream().distinct().limit(4).toList();
+        var distinctParticipants = participantNames.stream().limit(8).toList();
         var participants = distinctParticipants.stream()
                 .map(player -> participant(analysis, player, start, end, deaths))
                 .toList();
 
-        String opponent = distinctParticipants.stream()
-                .filter(player -> !player.equalsIgnoreCase(initiator))
-                .findFirst().orElse(null);
-        String winner = participants.stream()
-                .min(Comparator.comparingDouble(this::observedLossScore))
-                .map(Combat.Participant::player).orElse(null);
+        Integer initiatorTeam = teamOf(analysis, initiator);
+        var opposingPlayers = distinctParticipants.stream()
+                .filter(player -> isOpposingTeam(analysis, initiatorTeam, player))
+                .toList();
+
+        String opponent = opposingPlayers.isEmpty() ? null : String.join(" и ", opposingPlayers);
+        String winner = teamWinner(analysis, participants);
 
         long combatDeaths = deaths.stream()
                 .map(event -> deathUnitName(analysis, event))
@@ -74,7 +77,7 @@ public final class CombatEngine {
                 winner,
                 participants,
                 location(attack),
-                combatDeaths == 0 ? 0.45 : 0.82
+                combatDeaths == 0 ? 0.45 : 0.86
         );
     }
 
@@ -86,7 +89,7 @@ public final class CombatEngine {
             List<ReplayAnalysis.TimelineEvent> deaths
     ) {
         var playerDeaths = deaths.stream()
-                .filter(event -> player.equalsIgnoreCase(playerName(analysis, event.player())))
+                .filter(event -> player.equalsIgnoreCase(deathOwnerName(analysis, event)))
                 .map(event -> deathUnitName(analysis, event))
                 .filter(Objects::nonNull)
                 .toList();
@@ -106,9 +109,28 @@ public final class CombatEngine {
         );
     }
 
+    private String teamWinner(ReplayAnalysis analysis, List<Combat.Participant> participants) {
+        var lossesByTeam = new LinkedHashMap<Integer, Double>();
+        var playersByTeam = new LinkedHashMap<Integer, List<String>>();
+
+        for (var participant : participants) {
+            Integer team = teamOf(analysis, participant.player());
+            if (team == null) continue;
+            lossesByTeam.merge(team, observedLossScore(participant), Double::sum);
+            playersByTeam.computeIfAbsent(team, ignored -> new ArrayList<>()).add(participant.player());
+        }
+
+        if (lossesByTeam.size() < 2) return null;
+        var ordered = lossesByTeam.entrySet().stream()
+                .sorted(Map.Entry.comparingByValue())
+                .toList();
+        if (Math.abs(ordered.get(0).getValue() - ordered.get(1).getValue()) < 25.0) return null;
+        return String.join(" и ", playersByTeam.getOrDefault(ordered.get(0).getKey(), List.of()));
+    }
+
     private Map<String, Integer> grouped(List<String> units, Predicate<String> category) {
         return units.stream().filter(category)
-                .collect(Collectors.groupingBy(name -> name, LinkedHashMap::new,
+                .collect(Collectors.groupingBy(Sc2DisplayNames::unit, LinkedHashMap::new,
                         Collectors.summingInt(ignored -> 1)));
     }
 
@@ -136,12 +158,14 @@ public final class CombatEngine {
         var counts = new LinkedHashMap<String, Integer>();
         analysis.timeline().stream()
                 .filter(event -> value(event.time()) <= at)
-                .filter(event -> player.equalsIgnoreCase(playerName(analysis, event.player())))
+                .filter(event -> player.equalsIgnoreCase(ownerForLifecycleEvent(analysis, event)))
                 .forEach(event -> {
                     String unit = lifecycleUnitName(analysis, event);
                     if (!isCombatUnit(unit)) return;
-                    if (isBirth(event)) counts.merge(unit, 1, Integer::sum);
-                    if (isDeath(event)) counts.computeIfPresent(unit, (ignored, count) -> Math.max(0, count - 1));
+                    String displayName = Sc2DisplayNames.unit(unit);
+                    if (isBirth(event)) counts.merge(displayName, 1, Integer::sum);
+                    if (isDeath(event)) counts.computeIfPresent(displayName,
+                            (ignored, count) -> Math.max(0, count - 1));
                 });
         counts.values().removeIf(count -> count <= 0);
         return counts.entrySet().stream()
@@ -178,26 +202,63 @@ public final class CombatEngine {
         return isDeath(event) ? deathUnitName(analysis, event) : event.unit();
     }
 
+    private String ownerForLifecycleEvent(ReplayAnalysis analysis, ReplayAnalysis.TimelineEvent event) {
+        return isDeath(event) ? deathOwnerName(analysis, event) : playerName(analysis, event.player());
+    }
+
     private String deathUnitName(ReplayAnalysis analysis, ReplayAnalysis.TimelineEvent event) {
         if (event.unit() != null && !event.unit().isBlank()) return event.unit();
         if (event.victim() == null || event.victim().isBlank()) return null;
         return isKnownPlayerName(analysis, event.victim()) ? null : event.victim();
     }
 
+    private String deathOwnerName(ReplayAnalysis analysis, ReplayAnalysis.TimelineEvent event) {
+        if (event.victim() != null && isKnownPlayerName(analysis, event.victim())) {
+            return canonicalPlayerName(analysis, event.victim());
+        }
+        Object owner = event.attributes() == null ? null : event.attributes().get("owner");
+        if (owner != null) return canonicalPlayerName(analysis, String.valueOf(owner));
+        return null;
+    }
+
+    private String killerName(ReplayAnalysis analysis, ReplayAnalysis.TimelineEvent event) {
+        if (event.killer() != null && isKnownPlayerName(analysis, event.killer())) {
+            return canonicalPlayerName(analysis, event.killer());
+        }
+        return playerName(analysis, event.player());
+    }
+
     private boolean isKnownPlayerName(ReplayAnalysis analysis, String value) {
         return analysis.players().stream().anyMatch(player -> player.name().equalsIgnoreCase(value));
     }
 
+    private String canonicalPlayerName(ReplayAnalysis analysis, String value) {
+        return analysis.players().stream()
+                .map(ReplayAnalysis.Player::name)
+                .filter(name -> name.equalsIgnoreCase(value))
+                .findFirst().orElse(value);
+    }
+
+    private Integer teamOf(ReplayAnalysis analysis, String player) {
+        if (player == null) return null;
+        return analysis.players().stream()
+                .filter(candidate -> candidate.name().equalsIgnoreCase(player))
+                .map(ReplayAnalysis.Player::team)
+                .findFirst().orElse(null);
+    }
+
+    private boolean isOpposingTeam(ReplayAnalysis analysis, Integer initiatorTeam, String player) {
+        Integer team = teamOf(analysis, player);
+        return team != null && initiatorTeam != null && !team.equals(initiatorTeam);
+    }
+
     private boolean isCombatUnit(String unit) {
-        return unit != null && !unit.isBlank()
-                && !isWorker(unit)
-                && !isStructure(unit)
-                && !isNoise(unit);
+        return unit != null && !unit.isBlank() && !isWorker(unit) && !isStructure(unit) && !isNoise(unit);
     }
 
     private boolean isWorker(String unit) {
         String value = lower(unit);
-        return value.contains("scv") || value.contains("probe") || value.contains("drone") || value.contains("mule");
+        return value.equals("scv") || value.equals("probe") || value.equals("drone") || value.equals("mule");
     }
 
     private boolean isStaticDefense(String unit) {
@@ -218,7 +279,8 @@ public final class CombatEngine {
                 || value.contains("extractor") || value.contains("engineeringbay") || value.contains("armory")
                 || value.contains("forge") || value.contains("spire") || value.contains("den")
                 || value.contains("core") || value.contains("archive") || value.contains("bay")
-                || value.contains("pool") || value.contains("chamber") || value.contains("nest");
+                || value.contains("pool") || value.contains("chamber") || value.contains("nest")
+                || value.contains("warren");
     }
 
     private boolean isNoise(String unit) {
@@ -241,10 +303,10 @@ public final class CombatEngine {
 
     private double observedLossScore(Combat.Participant participant) {
         double armyLoss = Math.max(0, participant.armyValueBefore() - participant.armyValueAfter());
-        int combatDeaths = count(participant.unitsLost());
-        int workerDeaths = count(participant.workersLost());
-        int structureDeaths = count(participant.structuresLost()) + count(participant.staticDefenseLost());
-        return armyLoss + combatDeaths * 25.0 + workerDeaths * 50.0 + structureDeaths * 200.0;
+        return armyLoss
+                + count(participant.unitsLost()) * 25.0
+                + count(participant.workersLost()) * 50.0
+                + (count(participant.structuresLost()) + count(participant.staticDefenseLost())) * 200.0;
     }
 
     private int count(Map<String, Integer> values) {
@@ -256,12 +318,16 @@ public final class CombatEngine {
         if (player instanceof Number number) {
             return analysis.players().stream()
                     .filter(candidate -> candidate.pid() != null && candidate.pid() == number.intValue())
-                    .map(ReplayAnalysis.Player::name).findFirst().orElse(String.valueOf(player));
+                    .map(ReplayAnalysis.Player::name).findFirst().orElse(null);
         }
         String raw = String.valueOf(player);
         return analysis.players().stream()
                 .filter(candidate -> raw.equalsIgnoreCase(candidate.name()) || raw.equals(String.valueOf(candidate.pid())))
-                .map(ReplayAnalysis.Player::name).findFirst().orElse(raw);
+                .map(ReplayAnalysis.Player::name).findFirst().orElse(null);
+    }
+
+    private void addDistinct(List<String> values, String value) {
+        if (value != null && values.stream().noneMatch(existing -> existing.equalsIgnoreCase(value))) values.add(value);
     }
 
     private String location(ReplayAnalysis.TimelineEvent event) {
