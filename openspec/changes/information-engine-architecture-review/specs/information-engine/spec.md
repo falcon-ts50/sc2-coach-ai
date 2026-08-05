@@ -18,6 +18,8 @@ The Information Engine SHALL be owned by `java/coach-domain` and SHALL remain in
 
 It SHALL answer information-state questions: what a player potentially could know, what remained missing, which later actions are response candidates, and how confident those conclusions are.
 
+It SHALL support, directly or through a sibling preparation capability, between-engagement strategic preparation analysis grounded in player-perspective information state.
+
 It SHALL NOT own replay decoding, combat clustering, loss attribution, winner selection, recommendation generation, HTTP orchestration or frontend rendering.
 
 #### Scenario: Combat context consumes information
@@ -52,6 +54,28 @@ The Information Engine SHALL accept replay-derived domain input, currently `Repl
 - WHEN a potential observation requires geometry;
 - THEN the engine SHALL omit that observation or emit an explicitly partial result with reduced confidence;
 - AND it SHALL NOT reconstruct coordinates.
+
+### Requirement: Replay facts are separate from player perspective
+
+The Information Engine SHALL distinguish omniscient replay facts from player- or team-perspective information state.
+
+An omniscient fact is something that existed in the replay. A player-perspective item is something a player or team potentially could have known based on scouting/contact evidence.
+
+#### Scenario: Enemy tech exists but was not scouted
+
+- GIVEN a replay contains an enemy technology structure;
+- AND no scout/contact/visibility evidence links that structure to the player perspective;
+- WHEN Information State is built;
+- THEN the structure SHALL NOT be emitted as `POTENTIALLY_KNOWN` for that player;
+- AND the relevant topic remains `UNKNOWN` or a `Missing Information` gap.
+
+#### Scenario: Visibility evidence is unavailable
+
+- GIVEN replay data contains low-level unit and structure events;
+- AND the decoder does not provide a complete vision log;
+- WHEN the engine emits player-perspective information;
+- THEN it uses `Potentially Observed`;
+- AND it records that exact visibility is unavailable.
 
 ### Requirement: Versioned configuration
 
@@ -205,6 +229,8 @@ Knowledge states SHALL include `UNKNOWN` and `POTENTIALLY_KNOWN`. `KNOWN` SHALL 
 
 Information Advantage SHALL NOT be a single numeric score.
 
+Every player-perspective state SHALL include acquisition timing and staleness semantics when it represents potentially known information.
+
 #### Scenario: Player potentially knows opponent tech
 
 - GIVEN a player has a technology observation scoped to an opponent or opponent team;
@@ -212,12 +238,123 @@ Information Advantage SHALL NOT be a single numeric score.
 - THEN that player's state for that target marks army tech as `POTENTIALLY_KNOWN`;
 - AND includes the observation evidence.
 
+#### Scenario: Information becomes stale
+
+- GIVEN a player potentially observed an opponent army composition early;
+- AND no later contact refreshed that topic before the next engagement;
+- WHEN the report explains pre-fight information state;
+- THEN the topic is marked stale or uncertain after the configured staleness window;
+- AND the report SHALL NOT imply current knowledge.
+
 #### Scenario: Team game with multiple opponents
 
 - GIVEN a team replay with more than one opponent;
 - WHEN Information State is built;
 - THEN target player/team scope is preserved;
 - AND observations from different opponents are not merged into an unscoped bucket.
+
+#### Scenario: Ally scouts for the team
+
+- GIVEN one ally potentially observes opponent tech;
+- WHEN team-shared information is enabled by a documented rule;
+- THEN teammates may receive a team-scoped `POTENTIALLY_KNOWN` state;
+- AND the output records which ally provided the evidence;
+- AND confidence reflects that team sharing is a gameplay/team-inference rule, not direct individual vision.
+
+### Requirement: Strategic preparation intervals
+
+The capability SHALL model preparation between engagements as interval-scoped strategic allocation, not as combat winner selection.
+
+Each `StrategicPreparationInterval` SHALL include:
+
+- stable interval id;
+- start and end;
+- previous engagement id when known;
+- next engagement id when known;
+- players and teams;
+- information state at interval start/end;
+- per-player and per-team preparation profiles;
+- confidence and missing-data markers.
+
+The interval MAY be owned by Information Engine or by a sibling Preparation Engine, but it SHALL consume Information Engine output rather than reverse the dependency.
+
+#### Scenario: Interval between fights is available
+
+- GIVEN two engagement boundaries are available;
+- WHEN preparation analysis runs;
+- THEN it emits one interval ending at the later engagement start;
+- AND it does not use the later engagement winner to classify earlier preparation choices.
+
+#### Scenario: Engagement boundary is missing
+
+- GIVEN combat boundaries are unavailable or low confidence;
+- WHEN preparation analysis runs;
+- THEN it either omits the interval or emits a lower-confidence fallback window with the fallback basis recorded.
+
+### Requirement: Preparation profile categories
+
+For each player/team interval, the capability SHALL classify measurable preparation categories separately:
+
+- workers and future economy;
+- resource-bank accumulation and spending;
+- immediate army value and composition;
+- production capacity;
+- technology structures;
+- upgrades;
+- expansions;
+- static defence;
+- scouting and information acquisition;
+- allied synchronization.
+
+Each category SHALL include direct deltas or source facts, inferred classification, confidence and evidence. No single opaque preparation score is allowed.
+
+#### Scenario: Future economy versus immediate army
+
+- GIVEN player A adds workers or expands while player B adds army value in the same interval;
+- WHEN preparation is compared;
+- THEN the output explains the trade-off by category;
+- AND it SHALL NOT simply declare that one player prepared better.
+
+#### Scenario: Resource bank is not converted
+
+- GIVEN a player accumulates a large mineral/gas bank while army and production capacity do not grow;
+- WHEN preparation profile is built;
+- THEN the profile records bank accumulation and low conversion evidence;
+- AND confidence depends on available resource-bank and production evidence.
+
+#### Scenario: Static defence responds to possible threat
+
+- GIVEN a player potentially observed air tech;
+- AND later builds static defence within the interval;
+- WHEN response candidates are evaluated;
+- THEN the static defence action may be linked as a `Response Candidate`;
+- AND the output SHALL NOT claim the player built it because of the scouting.
+
+#### Scenario: Allied timing differs
+
+- GIVEN a team game where allies start army/upgrade/production preparation at materially different times;
+- WHEN team synchronization is evaluated;
+- THEN the interval records asynchronous preparation;
+- AND it preserves each player contribution rather than flattening the team into one actor.
+
+### Requirement: Readiness against next engagement or later power spike
+
+The capability SHALL be able to describe readiness at the next engagement start and against a later known power spike without using future facts as player knowledge.
+
+#### Scenario: Ready for immediate fight but behind later upgrade timing
+
+- GIVEN a player has higher immediate army value before the next fight;
+- AND the opponent has a later upgrade or technology power spike in the replay;
+- WHEN preparation comparison is emitted;
+- THEN it may say the player was prepared for the immediate fight but risks falling behind the later power spike;
+- AND it SHALL distinguish actual replay facts from what the player potentially knew at that time.
+
+#### Scenario: Later fact was not knowable
+
+- GIVEN a later power spike exists in the replay;
+- AND no player-perspective evidence made it potentially knowable before the interval ended;
+- WHEN narrative or Coach Feed consumes the comparison;
+- THEN it SHALL NOT say the player ignored or failed to react to that power spike as a fact.
 
 ### Requirement: Evidence traceability
 
@@ -265,6 +402,20 @@ Any change to serialized replay analysis, REST, Markdown, frontend or support-bu
 - GIVEN `AnalysisResponse` adds an information field;
 - WHEN existing clients omit or ignore that field;
 - THEN the response remains backward-compatible or the API version/migration is documented.
+
+#### Scenario: Support bundle carries information artifacts
+
+- GIVEN a support bundle is generated after Information Engine integration;
+- WHEN the bundle is inspected;
+- THEN it includes versioned information/preparation artifacts or embeds them in `analysis-response.json`;
+- AND older bundles without those artifacts remain readable with explicit "not available in this version" behaviour.
+
+#### Scenario: Version 0.7.0 bundle is reviewed
+
+- GIVEN a support bundle from application version `0.7.0`, commit `b30d8ce4d450`;
+- WHEN scouting and preparation sections are absent;
+- THEN the review records this as a combination of missing integration and incomplete domain/preparation contracts;
+- AND it SHALL NOT conclude that the decoder alone lacked all necessary data.
 
 ### Requirement: Real-replay validation
 

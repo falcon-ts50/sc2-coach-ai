@@ -7,11 +7,13 @@ This change authorizes `REVIEW` only. Do not modify production code.
 ## 1. Read gate
 
 - [x] 1.1 Read every mandatory source listed in `openspec/AGENTS.md`.
-  - Evidence: read `openspec/AGENTS.md`, `openspec/project.md`, `docs/PROJECT_STATE.md`, `docs/DECISIONS.md`, `ROADMAP.md`, `ARCHITECTURE.md`, all files under `openspec/changes/information-engine-architecture-review/`, relevant implementation/tests, and PR state for #63/#66.
+  - Evidence: read `openspec/AGENTS.md`, `openspec/project.md`, `docs/PROJECT_STATE.md`, `docs/DECISIONS.md`, `ROADMAP.md`, `ARCHITECTURE.md`, all files under `openspec/changes/information-engine-architecture-review/`, relevant implementation/tests, and PR state for #63/#67.
 - [x] 1.2 Identify the current Information Engine branch or PR and exact commit reviewed.
-  - Evidence: current implementation is merged PR #63 (`agent/information-engine-v1` -> `develop`), head commit `4bf4322fbeb1cc18a22a13b71851c74de7f9a316`, merge commit `8e3728b1b083c44efc48aadbd8ca67efb50586a5`, current `origin/develop` `5fc9150251d418811f7c5d2dc515fb6d83a56858`.
+  - Evidence: current implementation is merged PR #63 (`agent/information-engine-v1` -> `develop`), head commit `4bf4322fbeb1cc18a22a13b71851c74de7f9a316`, merge commit `8e3728b1b083c44efc48aadbd8ca67efb50586a5`, current `origin/develop` `6a1e226a0ed4ef513f999807ee44e6f6df6c4d54`.
 - [x] 1.3 Post the Read Gate report before editing any review artifact.
   - Evidence: Read Gate report sent in Telegram before modifying `design.md`, `spec.md` or `tasks.md`.
+- [x] 1.4 Re-run Read Gate after the follow-up REVIEW request added player-perspective state, between-fight preparation and support-bundle 0.7.0 review.
+  - Evidence: re-read `openspec/AGENTS.md`, `openspec/project.md`, active change files, project docs from `origin/develop` `6a1e226a0ed4ef513f999807ee44e6f6df6c4d54`, implementation/tests, `b30d8ce4d450` support-bundle/report path, and PR state for #63/#67; sent updated Read Gate report before editing follow-up artifacts.
 
 ## 2. Repository evidence
 
@@ -23,6 +25,10 @@ This change authorizes `REVIEW` only. Do not modify production code.
   - Evidence: completed in `design.md` sections `Responsibility boundary` and `Integration map`.
 - [x] 2.4 Record unavailable evidence rather than inferring it.
   - Evidence: `design.md` records unavailable real-replay validation and missing source event identities under deviations/open questions/test strategy.
+- [x] 2.5 Inspect support-bundle/report behaviour for version `0.7.0`, commit `b30d8ce4d450`.
+  - Evidence: `design.md` section `Support-bundle/report behaviour at 0.7.0` cites `AnalysisService`, `AnalysisResponse`, `AnalysisEngineConfiguration`, `CoachFeedEngine`, `frontend/src/main.jsx`, `review_bundle.py`, current `ReplayAnalysis`, `PlayerState`, `MatchContextEngine`, `ArgumentDeltaEngine`, and `DecisionEngine`.
+- [x] 2.6 Identify repository evidence for strategic preparation inputs and current gaps.
+  - Evidence: `ReplayAnalysis.PlayerStat`/`TimelineEvent`, `ReplayDomainMapper`, `PlayerState`, `MatchContextEngine`, `ArgumentDeltaEngine`, `DecisionEngine`, `EconomyDecisionDetector`, `ArmyDecisionDetector`; no `StrategicPreparationInterval`/`PreparationProfile` contract exists.
 
 ## 3. Architecture review
 
@@ -38,6 +44,12 @@ This change authorizes `REVIEW` only. Do not modify production code.
   - Evidence: `design.md` section `Alternatives considered`.
 - [x] 3.6 Record deviations with severity and recommended ownership.
   - Evidence: `design.md` section `Current implementation findings / Deviations`.
+- [x] 3.7 Define player-perspective information-state boundaries.
+  - Evidence: `design.md` sections `ReplayFact / omniscient fact layer`, `Player-perspective InformationState`, `Processing model`, `Invariants`, and deviations for missing omniscient-vs-perspective boundary and missing staleness lifecycle.
+- [x] 3.8 Define between-engagement strategic preparation scope and interval model.
+  - Evidence: `design.md` sections `StrategicPreparationInterval`, `PreparationProfile`, `PreparationComparison`, processing stages, alternatives, test strategy and follow-up APPLY tasks.
+- [x] 3.9 Determine why 0.7.0 reports lack scouting and preparation.
+  - Evidence: `design.md` concludes the cause is combined: Information Engine not wired into portal/REST/Coach Feed/frontend/support bundle, decoder/domain inputs are partial but lack exact visibility/provenance, and strategic preparation has no domain model.
 
 ## 4. Capability specification
 
@@ -47,6 +59,10 @@ This change authorizes `REVIEW` only. Do not modify production code.
   - Evidence: scenarios include Roach Warren -> Bunker, no scouting, missing coordinates, scout death, repeated analysis determinism, REST compatibility and private replay validation.
 - [x] 4.3 Ensure each requirement is testable and avoids implementation-detail wording where possible.
   - Evidence: requirements are written as SHALL statements with GIVEN/WHEN/THEN scenarios; implementation file names are limited to evidence in `design.md`, not normative behaviour except current canonical input.
+- [x] 4.4 Add player-perspective, acquisition/staleness and omniscient-fact separation requirements.
+  - Evidence: spec requirements `Replay facts are separate from player perspective`, `Information State and Advantage`, and scenarios for unscouted enemy tech, unavailable visibility evidence, stale information and ally team sharing.
+- [x] 4.5 Add strategic preparation interval and category requirements.
+  - Evidence: spec requirements `Strategic preparation intervals`, `Preparation profile categories`, `Readiness against next engagement or later power spike`, and support-bundle compatibility scenarios.
 
 ## 5. Follow-up plan
 
@@ -68,9 +84,17 @@ This change authorizes `REVIEW` only. Do not modify production code.
 - [ ] A.7 Add missing-coordinate, missing-owner, ambiguous same-unit scout and multi-opponent team-game tests.
 - [ ] A.8 Validate against private real replay artifacts outside git and record outputs/deviations.
 - [ ] A.9 Before public integration, document REST/support-bundle compatibility and update `docs/PROJECT_STATE.md`, `docs/DECISIONS.md`, `ROADMAP.md` or `ARCHITECTURE.md` if the accepted architecture changes.
+- [ ] A.10 Add `ReplayFact` or equivalent source-fact model separating omniscient replay facts from player-perspective information.
+- [ ] A.11 Add acquisition/staleness fields to player-perspective information state, including stale-after and missing-visibility markers.
+- [ ] A.12 Decide whether between-engagement preparation is owned by Information Engine or a sibling `PreparationEngine`; document the decision as an ADR if ownership changes.
+- [ ] A.13 Implement `StrategicPreparationInterval`, `PreparationProfile` and `PreparationComparison` contracts for workers/economy, immediate army, production capacity, tech/upgrades, expansions, static defence, scouting, resource bank/spend conversion and allied synchronization.
+- [ ] A.14 Add support-bundle/REST artifacts for information and preparation outputs with versioned backward compatibility.
+- [ ] A.15 Add tests proving omniscient replay facts do not leak into player-perspective knowledge without scouting/contact evidence.
+- [ ] A.16 Add tests for preparation trade-offs, ally synchronization and readiness against the next engagement or later power spike without causal claims.
 
 ## Evidence log
 
-- OpenSpec source branch: PR #66 `agent/openspec-workflow` -> `develop`, head `aef1e7e846b196831011325b4b4e7250609a7efc` before review updates.
-- Information implementation source: PR #63 merged into `develop`; head `4bf4322fbeb1cc18a22a13b71851c74de7f9a316`, merge `8e3728b1b083c44efc48aadbd8ca67efb50586a5`, reviewed from `origin/develop` `5fc9150251d418811f7c5d2dc515fb6d83a56858`.
+- OpenSpec review branch: PR #67 `agent/information-engine-architecture-review` -> `develop`, head `14fe819e3df8251af191505a9afb2fce0c8e60f1` before follow-up review updates.
+- Information implementation source: PR #63 merged into `develop`; head `4bf4322fbeb1cc18a22a13b71851c74de7f9a316`, merge `8e3728b1b083c44efc48aadbd8ca67efb50586a5`, reviewed from `origin/develop` `6a1e226a0ed4ef513f999807ee44e6f6df6c4d54`.
+- Support-bundle/report behaviour source: production `main` commit `b30d8ce4d450`, application version `0.7.0`.
 - Production code changes under this REVIEW: none.
