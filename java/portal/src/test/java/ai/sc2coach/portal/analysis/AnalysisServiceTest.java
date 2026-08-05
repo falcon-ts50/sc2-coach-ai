@@ -1,5 +1,16 @@
 package ai.sc2coach.portal.analysis;
 
+import ai.sc2coach.domain.ReplayAnalysisReader;
+import ai.sc2coach.domain.coach.CoachFeedEngine;
+import ai.sc2coach.domain.context.MatchContextEngine;
+import ai.sc2coach.domain.context.TurningPointEngine;
+import ai.sc2coach.domain.decision.DecisionEngine;
+import ai.sc2coach.domain.delta.ArgumentDeltaEngine;
+import ai.sc2coach.domain.episode.EpisodeEngine;
+import ai.sc2coach.domain.knowledge.KnowledgeEngine;
+import ai.sc2coach.domain.model.ReplayDomainMapper;
+import ai.sc2coach.domain.narrative.CoachNarrativeEngine;
+import ai.sc2coach.domain.narrative.NarrativeEngine;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockMultipartFile;
 
@@ -35,7 +46,7 @@ class AnalysisServiceTest {
             }
         };
 
-        AnalysisService service = new AnalysisService(decoder, new ReplayUploadValidator());
+        AnalysisService service = service(decoder);
         MockMultipartFile upload = new MockMultipartFile(
                 "replay", "../unsafe.SC2Replay", "application/octet-stream", new byte[]{'M', 'P', 'Q', 0x1A}
         );
@@ -49,5 +60,23 @@ class AnalysisServiceTest {
         assertThat(replayPath.get().getFileName().toString()).isEqualTo("unsafe.SC2Replay");
         assertThat(replayPath.get()).doesNotExist();
         assertThat(outputPath.get()).doesNotExist();
+    }
+
+    private AnalysisService service(ReplayDecoder decoder) {
+        return new AnalysisService(
+                decoder,
+                new ReplayAnalysisReader(),
+                new ReplayDomainMapper(),
+                new MatchContextEngine(),
+                new TurningPointEngine(),
+                DecisionEngine.defaults(),
+                KnowledgeEngine.defaults(),
+                new CoachFeedEngine(),
+                new EpisodeEngine(),
+                new ArgumentDeltaEngine(),
+                new NarrativeEngine(),
+                new CoachNarrativeEngine(),
+                new ReplayUploadValidator()
+        );
     }
 }
