@@ -29,6 +29,22 @@ public record AnalysisResponse(
         combats = combats == null ? List.of() : List.copyOf(combats);
     }
 
+    public AnalysisResponse(
+            String schemaVersion,
+            String map,
+            Double gameSeconds,
+            List<PlayerSummary> players,
+            MatchComparison.Result comparison,
+            MatchContext matchContext,
+            List<TurningPoint> turningPoints,
+            CoachFeed coachFeed,
+            String transcriptMarkdown,
+            Diagnostics diagnostics
+    ) {
+        this(schemaVersion, map, gameSeconds, null, players, comparison, matchContext,
+                turningPoints, List.of(), coachFeed, transcriptMarkdown, diagnostics);
+    }
+
     public static AnalysisResponse from(
             ReplayAnalysis analysis,
             String focusPlayer,
