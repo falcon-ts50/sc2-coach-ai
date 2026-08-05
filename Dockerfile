@@ -12,6 +12,8 @@ COPY --from=frontend-build /src/frontend/dist ./java/portal/src/main/resources/s
 RUN cd java && mvn --batch-mode --no-transfer-progress -DskipTests package
 
 FROM eclipse-temurin:25-jre
+ARG APP_VERSION=0.7.0-SNAPSHOT
+ARG GIT_COMMIT=unknown
 WORKDIR /app
 RUN apt-get update \
     && apt-get install -y --no-install-recommends python3 python3-pip \
@@ -24,6 +26,8 @@ RUN pip3 install --break-system-packages --no-cache-dir -r requirements.txt
 
 ENV SC2_COACH_PYTHON=python3
 ENV SC2_COACH_DECODER_SCRIPT=/app/analyze.py
+ENV APP_VERSION=${APP_VERSION}
+ENV GIT_COMMIT=${GIT_COMMIT}
 ENV JAVA_OPTS="-XX:MaxRAMPercentage=70"
 ENV HOME=/tmp
 ENV MPLCONFIGDIR=/tmp/matplotlib
