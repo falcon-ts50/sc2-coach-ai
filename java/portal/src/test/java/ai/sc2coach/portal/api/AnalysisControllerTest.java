@@ -4,6 +4,7 @@ import ai.sc2coach.domain.coach.CoachFeed;
 import ai.sc2coach.domain.combat.Combat;
 import ai.sc2coach.domain.context.MatchContext;
 import ai.sc2coach.domain.context.TurningPoint;
+import ai.sc2coach.domain.narrative.analysis.NarrativeAnalysis;
 import ai.sc2coach.portal.analysis.AnalysisResponse;
 import ai.sc2coach.portal.analysis.AnalysisService;
 import ai.sc2coach.portal.analysis.MatchComparison;
@@ -79,7 +80,8 @@ class AnalysisControllerTest {
         given(analysisService.analyze(any(), nullable(String.class))).willReturn(new AnalysisResponse(
                 "0.2.0", "Test Map", 120.0, "Alpha",
                 List.of(new AnalysisResponse.PlayerSummary(1, "Alpha", "Terran", 1, "Win", 3500, 100.0)),
-                comparison, new MatchContext(List.of(), summary), List.of(point), List.of(combat), feed,
+                comparison, new MatchContext(List.of(), summary), List.of(point), List.of(combat),
+                NarrativeAnalysis.empty("Alpha"), feed,
                 "# Transcript\n\n- `01:30` **Alpha** — command: Attack",
                 diagnostics
         ));
@@ -95,6 +97,7 @@ class AnalysisControllerTest {
                 .andExpect(jsonPath("$.combats[0].ordinalLabel").value("Бой 1"))
                 .andExpect(jsonPath("$.combats[0].participants[0].additions.Marine").value(3))
                 .andExpect(jsonPath("$.combats[0].participants[0].reconciliationStatus").value("EXACT"))
+                .andExpect(jsonPath("$.narrativeAnalysis.strategicResultStatus").value("NOT_EVALUATED"))
                 .andExpect(jsonPath("$.coachFeed.cards[0].title").value("Перелом"))
                 .andExpect(jsonPath("$.transcriptMarkdown").value(org.hamcrest.Matchers.containsString("Attack")))
                 .andExpect(jsonPath("$.diagnostics.analysisId").value("analysis-123"))

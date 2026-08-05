@@ -39,6 +39,49 @@ test('renders chronological combat history with additions', () => {
   assert.match(markdown, /Сверка: точная/);
 });
 
+test('renders backend-owned narrative analysis without strategic inference', () => {
+  const markdown = buildMarkdown({
+    focusPlayer: 'dragonDriver',
+    map: 'Test Map',
+    gameSeconds: 900,
+    coachFeed: { headline: 'Готово.', cards: [], nextGameRecommendations: [] },
+    narrativeAnalysis: {
+      officialReplayResult: 'Win',
+      status: 'PRELIMINARY',
+      strategicResultStatus: 'NOT_EVALUATED',
+      focusTeamPlayers: ['Lulu', 'dragonDriver'],
+      summary: { verdict: 'Официальный результат есть, стратегический итог не вычисляется.' },
+      timeline: {
+        phases: [{
+          startedAt: 'PT0S',
+          endedAt: 'PT420S',
+          title: 'Раннее давление',
+          summary: 'Контекст показывает спад.',
+        }],
+        causalLinks: [{
+          kind: 'PRECEDED',
+          statement: 'Предыдущая фаза предшествует следующей, но не доказывает причинность.',
+        }],
+      },
+      chart: {
+        series: [{
+          label: 'Стоимость армии',
+          completeness: 'COMPLETE',
+          points: [{ at: 'PT0S', value: 0 }, { at: 'PT420S', value: 900 }],
+        }],
+      },
+      limitations: ['Replay does not prove intent.'],
+    },
+    combats: [],
+  });
+
+  assert.match(markdown, /## Narrative Analysis/);
+  assert.match(markdown, /Strategic result: NOT_EVALUATED/);
+  assert.match(markdown, /Раннее давление/);
+  assert.match(markdown, /Стоимость армии: COMPLETE, 2 точек/);
+  assert.doesNotMatch(markdown, /guaranteed win|caused/i);
+});
+
 test('distinguishes empty and unavailable values', () => {
   assert.equal(composition({}), 'нет');
   assert.equal(composition(null, true), 'нет данных');

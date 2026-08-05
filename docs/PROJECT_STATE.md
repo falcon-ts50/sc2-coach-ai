@@ -16,6 +16,7 @@ SC2Replay
   -> Java ReplayAnalysis domain model
   -> macro and turning-point analysis
   -> Combat Engine V2
+  -> Narrative Analysis vertical slice
   -> Combat Narrative Engine
   -> Coach feed/API response
   -> React report
@@ -40,12 +41,14 @@ SC2Replay
 - Combat Detector V3 contracts for raw combat evidence, spatial-temporal clustering and final combat assembly.
 - Regression coverage for spatially separated fights, missing coordinates, victim ownership and team participants.
 - Information Engine V1 domain contracts for scouting-derived potential information, gaps, response candidates and information state.
+- Narrative Analysis V1 vertical slice exposes a backend-owned player-focused timeline, preliminary verdict, state transitions, cautious causal chain and match-overview chart model through REST, Markdown, support bundle and the React report.
 
 ## Known limitations
 
 - Production combat detection still starts primarily from Attack commands and a fixed time window.
 - Combat Detector V3 clustering contracts exist, but are not wired into the production report flow yet.
 - Information Engine V1 is independent from combat analysis and is not wired into the public report yet.
+- Narrative Analysis V1 is preliminary and does not infer strategic result, player intent, vision certainty, or guaranteed causal outcomes; `strategicResultStatus` remains `NOT_EVALUATED`.
 - Army reconstruction is lifecycle-event based and can be incomplete when replay events omit ownership or transformations.
 - Combat additions mean units that became available during the engagement interval; the report does not claim those units physically joined the local fight unless future spatial evidence supports that.
 - Combat outcome is heuristic, not a full simulation of tactical value.
