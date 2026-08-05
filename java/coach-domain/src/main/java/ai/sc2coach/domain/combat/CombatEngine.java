@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 public final class CombatEngine {
@@ -19,13 +20,10 @@ public final class CombatEngine {
     private static final double MIN_ATTACK_GAP_SECONDS = 30;
 
     public List<Combat> detect(ReplayAnalysis analysis, String focusPlayer) {
-        var attacks = analysis.timeline().stream()
+        return analysis.timeline().stream()
                 .filter(this::isAttackCommand)
                 .sorted(Comparator.comparingDouble(event -> value(event.time())))
                 .filter(new SpacedAttackPredicate())
-                .toList();
-
-        return attacks.stream()
                 .map(event -> buildCombat(analysis, event))
                 .filter(combat -> combat.participants().size() >= 2)
                 .filter(this::hasObservedCombatLoss)
@@ -44,7 +42,6 @@ public final class CombatEngine {
         var deaths = analysis.timeline().stream()
                 .filter(this::isDeath)
                 .filter(event -> value(event.time()) >= start && value(event.time()) <= end)
-                .filter(event -> isCombatUnit(deathUnitName(analysis, event)))
                 .toList();
 
         var participantNames = new ArrayList<String>();
@@ -64,6 +61,11 @@ public final class CombatEngine {
                 .min(Comparator.comparingDouble(this::observedLossScore))
                 .map(Combat.Participant::player).orElse(null);
 
+        long combatDeaths = deaths.stream()
+                .map(event -> deathUnitName(analysis, event))
+                .filter(this::isCombatUnit)
+                .count();
+
         return new Combat(
                 Duration.ofMillis(Math.round(start * 1000)),
                 Duration.ofMillis(Math.round(end * 1000)),
@@ -72,7 +74,7 @@ public final class CombatEngine {
                 winner,
                 participants,
                 location(attack),
-                deaths.isEmpty() ? 0.45 : 0.82
+                combatDeaths == 0 ? 0.45 : 0.82
         );
     }
 
@@ -83,22 +85,49 @@ public final class CombatEngine {
             double end,
             List<ReplayAnalysis.TimelineEvent> deaths
     ) {
-        var before = armyAt(analysis, player, start);
-        var after = armyAt(analysis, player, end);
-        var lost = deaths.stream()
+        var playerDeaths = deaths.stream()
                 .filter(event -> player.equalsIgnoreCase(playerName(analysis, event.player())))
                 .map(event -> deathUnitName(analysis, event))
-                .filter(this::isCombatUnit)
-                .collect(Collectors.groupingBy(name -> name, LinkedHashMap::new, Collectors.summingInt(ignored -> 1)));
+                .filter(Objects::nonNull)
+                .toList();
 
         return new Combat.Participant(
                 player,
-                before,
-                after,
-                lost,
+                armyAt(analysis, player, start),
+                armyAt(analysis, player, end),
+                grouped(playerDeaths, this::isCombatUnit),
+                grouped(playerDeaths, this::isWorker),
+                grouped(playerDeaths, unit -> isStructure(unit) && !isStaticDefense(unit)),
+                grouped(playerDeaths, this::isStaticDefense),
+                completedUpgrades(analysis, player, start, this::isLevelUpgrade),
+                completedUpgrades(analysis, player, start, upgrade -> !isLevelUpgrade(upgrade)),
                 armyValueAt(analysis, player, start),
                 armyValueAt(analysis, player, end)
         );
+    }
+
+    private Map<String, Integer> grouped(List<String> units, Predicate<String> category) {
+        return units.stream().filter(category)
+                .collect(Collectors.groupingBy(name -> name, LinkedHashMap::new,
+                        Collectors.summingInt(ignored -> 1)));
+    }
+
+    private List<String> completedUpgrades(
+            ReplayAnalysis analysis,
+            String player,
+            double at,
+            Predicate<String> category
+    ) {
+        return analysis.timeline().stream()
+                .filter(event -> value(event.time()) <= at)
+                .filter(event -> player.equalsIgnoreCase(playerName(analysis, event.player())))
+                .map(ReplayAnalysis.TimelineEvent::upgrade)
+                .filter(Objects::nonNull)
+                .filter(upgrade -> !upgrade.isBlank())
+                .filter(category)
+                .distinct()
+                .sorted()
+                .toList();
     }
 
     private Map<String, Integer> armyAt(ReplayAnalysis analysis, String player, double at) {
@@ -131,9 +160,7 @@ public final class CombatEngine {
     }
 
     private boolean isAttackCommand(ReplayAnalysis.TimelineEvent event) {
-        String eventName = lower(event.event());
-        String ability = lower(event.ability());
-        return eventName.contains("command") && ability.contains("attack");
+        return lower(event.event()).contains("command") && lower(event.ability()).contains("attack");
     }
 
     private boolean isBirth(ReplayAnalysis.TimelineEvent event) {
@@ -146,8 +173,7 @@ public final class CombatEngine {
     }
 
     private String lifecycleUnitName(ReplayAnalysis analysis, ReplayAnalysis.TimelineEvent event) {
-        if (isDeath(event)) return deathUnitName(analysis, event);
-        return event.unit();
+        return isDeath(event) ? deathUnitName(analysis, event) : event.unit();
     }
 
     private String deathUnitName(ReplayAnalysis analysis, ReplayAnalysis.TimelineEvent event) {
@@ -161,43 +187,50 @@ public final class CombatEngine {
     }
 
     private boolean isCombatUnit(String unit) {
-        if (unit == null || unit.isBlank()) return false;
+        return unit != null && !unit.isBlank()
+                && !isWorker(unit)
+                && !isStructure(unit)
+                && !isNoise(unit);
+    }
+
+    private boolean isWorker(String unit) {
         String value = lower(unit);
-        return !value.startsWith("beacon")
-                && !value.contains("mineralfield")
-                && !value.contains("vespeneg")
-                && !value.contains("destructible")
-                && !value.contains("watchtower")
-                && !value.contains("xelnaga")
-                && !value.contains("larva")
-                && !value.contains("egg")
-                && !value.contains("mule")
-                && !value.contains("scv")
-                && !value.contains("probe")
-                && !value.contains("drone")
-                && !value.contains("commandcenter")
-                && !value.contains("orbitalcommand")
-                && !value.contains("planetaryfortress")
-                && !value.contains("nexus")
-                && !value.contains("hatchery")
-                && !value.contains("lair")
-                && !value.contains("hive")
-                && !value.contains("barracks")
-                && !value.contains("factory")
-                && !value.contains("starport")
-                && !value.contains("gateway")
-                && !value.contains("warpgate")
-                && !value.contains("pylon")
-                && !value.contains("supplydepot")
-                && !value.contains("refinery")
-                && !value.contains("assimilator")
-                && !value.contains("extractor")
-                && !value.contains("engineeringbay")
-                && !value.contains("armory")
-                && !value.contains("missileturret")
-                && !value.contains("photoncannon")
-                && !value.contains("spinecrawler")
-                && !value.contains("sporecrawler");
+        return value.contains("scv") || value.contains("probe") || value.contains("drone") || value.contains("mule");
+    }
+
+    private boolean isStaticDefense(String unit) {
+        String value = lower(unit);
+        return value.contains("missileturret") || value.contains("photoncannon")
+                || value.contains("spinecrawler") || value.contains("sporecrawler")
+                || value.contains("bunker") || value.contains("planetaryfortress");
+    }
+
+    private boolean isStructure(String unit) {
+        String value = lower(unit);
+        return isStaticDefense(unit)
+                || value.contains("commandcenter") || value.contains("orbitalcommand")
+                || value.contains("nexus") || value.contains("hatchery") || value.contains("lair") || value.contains("hive")
+                || value.contains("barracks") || value.contains("factory") || value.contains("starport")
+                || value.contains("gateway") || value.contains("warpgate") || value.contains("pylon")
+                || value.contains("supplydepot") || value.contains("refinery") || value.contains("assimilator")
+                || value.contains("extractor") || value.contains("engineeringbay") || value.contains("armory")
+                || value.contains("forge") || value.contains("spire") || value.contains("den")
+                || value.contains("core") || value.contains("archive") || value.contains("bay")
+                || value.contains("pool") || value.contains("chamber") || value.contains("nest");
+    }
+
+    private boolean isNoise(String unit) {
+        String value = lower(unit);
+        return value.startsWith("beacon") || value.contains("mineralfield") || value.contains("vespeneg")
+                || value.contains("destructible") || value.contains("watchtower") || value.contains("xelnaga")
+                || value.contains("larva") || value.contains("egg") || value.contains("creep")
+                || value.contains("broodlingescort");
+    }
+
+    private boolean isLevelUpgrade(String upgrade) {
+        String value = lower(upgrade);
+        return value.contains("weapon") || value.contains("armor") || value.contains("armour")
+                || value.contains("shield") || value.matches(".*level[123].*");
     }
 
     private boolean hasObservedCombatLoss(Combat combat) {
@@ -205,9 +238,15 @@ public final class CombatEngine {
     }
 
     private double observedLossScore(Combat.Participant participant) {
-        double resourceLoss = Math.max(0, participant.armyValueBefore() - participant.armyValueAfter());
-        int observedDeaths = participant.unitsLost().values().stream().mapToInt(Integer::intValue).sum();
-        return resourceLoss + observedDeaths * 25.0;
+        double armyLoss = Math.max(0, participant.armyValueBefore() - participant.armyValueAfter());
+        int combatDeaths = count(participant.unitsLost());
+        int workerDeaths = count(participant.workersLost());
+        int structureDeaths = count(participant.structuresLost()) + count(participant.staticDefenseLost());
+        return armyLoss + combatDeaths * 25.0 + workerDeaths * 50.0 + structureDeaths * 200.0;
+    }
+
+    private int count(Map<String, Integer> values) {
+        return values.values().stream().mapToInt(Integer::intValue).sum();
     }
 
     private String playerName(ReplayAnalysis analysis, Object player) {
@@ -236,7 +275,7 @@ public final class CombatEngine {
         return number == null ? 0 : number.doubleValue();
     }
 
-    private static final class SpacedAttackPredicate implements java.util.function.Predicate<ReplayAnalysis.TimelineEvent> {
+    private static final class SpacedAttackPredicate implements Predicate<ReplayAnalysis.TimelineEvent> {
         private double previous = -Double.MAX_VALUE;
 
         @Override
