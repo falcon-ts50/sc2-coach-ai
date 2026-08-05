@@ -19,6 +19,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.nullable;
 import static org.mockito.BDDMockito.given;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -54,7 +55,7 @@ class AnalysisControllerTest {
                 "analysis-123", "0.7.0", "abcdef1", Instant.parse("2026-08-05T11:00:00Z"),
                 183_431, 750, 120, 870
         );
-        given(analysisService.analyze(any())).willReturn(new AnalysisResponse(
+        given(analysisService.analyze(any(), nullable(String.class))).willReturn(new AnalysisResponse(
                 "0.2.0", "Test Map", 120.0,
                 List.of(new AnalysisResponse.PlayerSummary(1, "Alpha", "Terran", 1, "Win", 3500, 100.0)),
                 comparison, new MatchContext(List.of(), summary), List.of(point), feed,
@@ -65,7 +66,7 @@ class AnalysisControllerTest {
                 "replay", "match.SC2Replay", "application/octet-stream", new byte[]{1}
         );
 
-        mockMvc.perform(multipart("/api/v1/analyses").file(replay))
+        mockMvc.perform(multipart("/api/v1/analyses").file(replay).param("focusPlayer", "Alpha"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.matchContext.summary.finalLeaderName").value("Alpha"))
                 .andExpect(jsonPath("$.turningPoints[0].newLeaderName").value("Alpha"))
