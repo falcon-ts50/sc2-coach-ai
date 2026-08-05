@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 
 BRANCH="${SC2_COACH_BRANCH:-main}"
-PORT="${SC2_COACH_PORT:-8080}"
+PORT="${SC2_COACH_PORT:-18080}"
 
 printf 'Updating SC2 Coach from %s...\n' "$BRANCH"
 git fetch --prune origin

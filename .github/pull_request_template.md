@@ -1,5 +1,10 @@
 PR Details
 
+Target branch
+
+- Feature branches should target `develop`.
+- `main` only accepts release PRs from `develop`.
+
 Description
 
 Related Issue

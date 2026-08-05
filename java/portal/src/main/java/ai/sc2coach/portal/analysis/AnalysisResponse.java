@@ -5,6 +5,7 @@ import ai.sc2coach.domain.coach.CoachFeed;
 import ai.sc2coach.domain.context.MatchContext;
 import ai.sc2coach.domain.context.TurningPoint;
 
+import java.time.Instant;
 import java.util.List;
 
 public record AnalysisResponse(
@@ -16,7 +17,8 @@ public record AnalysisResponse(
         MatchContext matchContext,
         List<TurningPoint> turningPoints,
         CoachFeed coachFeed,
-        String transcriptMarkdown
+        String transcriptMarkdown,
+        Diagnostics diagnostics
 ) {
     public AnalysisResponse {
         players = List.copyOf(players);
@@ -27,7 +29,8 @@ public record AnalysisResponse(
             ReplayAnalysis analysis,
             MatchContext matchContext,
             List<TurningPoint> turningPoints,
-            CoachFeed coachFeed
+            CoachFeed coachFeed,
+            Diagnostics diagnostics
     ) {
         return new AnalysisResponse(
                 analysis.schemaVersion(),
@@ -38,8 +41,21 @@ public record AnalysisResponse(
                 matchContext,
                 turningPoints,
                 coachFeed,
-                analysis.transcriptMarkdown()
+                analysis.transcriptMarkdown(),
+                diagnostics
         );
+    }
+
+    public record Diagnostics(
+            String analysisId,
+            String applicationVersion,
+            String gitCommit,
+            Instant generatedAt,
+            long replaySizeBytes,
+            long decodeTimeMs,
+            long analysisTimeMs,
+            long totalTimeMs
+    ) {
     }
 
     public record PlayerSummary(

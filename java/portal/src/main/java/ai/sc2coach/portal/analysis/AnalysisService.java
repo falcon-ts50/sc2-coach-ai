@@ -23,6 +23,7 @@ import ai.sc2coach.domain.narrative.CoachNarrativeEngine;
 import ai.sc2coach.domain.narrative.MatchNarrative;
 import ai.sc2coach.domain.narrative.NarrativeEngine;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -30,12 +31,18 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
+import java.util.UUID;
 import java.util.stream.Stream;
 
 @Service
+@Slf4j
 @RequiredArgsConstructor
 public final class AnalysisService {
+
+    private static final String APPLICATION_VERSION = System.getenv().getOrDefault("APP_VERSION", "0.7.0-SNAPSHOT");
+    private static final String GIT_COMMIT = System.getenv().getOrDefault("GIT_COMMIT", "unknown");
 
     private final ReplayDecoder replayDecoder;
     private final ReplayAnalysisReader reader;
@@ -52,14 +59,25 @@ public final class AnalysisService {
     private final ReplayUploadValidator uploadValidator;
 
     public AnalysisResponse analyze(MultipartFile replay) {
+        String analysisId = UUID.randomUUID().toString();
+        long startedAt = System.nanoTime();
         String filename = uploadValidator.validateMetadata(replay);
+        long replaySize = replay.getSize();
+
+        log.info("analysis_started id={} replaySizeBytes={} filenameExtension=.SC2Replay", analysisId, replaySize);
+
         try (TemporaryWorkspace workspace = TemporaryWorkspace.create()) {
             Path replayPath = workspace.replayPath(filename);
             try (var input = replay.getInputStream()) {
                 Files.copy(input, replayPath);
             }
             uploadValidator.validateReplaySignature(replayPath);
+
+            long decodeStartedAt = System.nanoTime();
             Path analysisPath = replayDecoder.decode(replayPath, workspace.output());
+            long decodeTimeMs = elapsedMillis(decodeStartedAt);
+
+            long analysisStartedAt = System.nanoTime();
             ReplayAnalysis analysis = reader.read(analysisPath);
             Match match = domainMapper.map(analysis);
             MatchContext matchContext = contextEngine.analyze(match);
@@ -94,10 +112,37 @@ public final class AnalysisService {
                     cards,
                     feed.nextGameRecommendations()
             );
+            long analysisTimeMs = elapsedMillis(analysisStartedAt);
+            long totalTimeMs = elapsedMillis(startedAt);
 
-            return AnalysisResponse.from(analysis, matchContext, turningPoints, coachFeed);
+            var diagnostics = new AnalysisResponse.Diagnostics(
+                    analysisId,
+                    APPLICATION_VERSION,
+                    GIT_COMMIT,
+                    Instant.now(),
+                    replaySize,
+                    decodeTimeMs,
+                    analysisTimeMs,
+                    totalTimeMs
+            );
+
+            log.info(
+                    "analysis_completed id={} decodeTimeMs={} analysisTimeMs={} totalTimeMs={} players={} turningPoints={}",
+                    analysisId, decodeTimeMs, analysisTimeMs, totalTimeMs,
+                    analysis.players().size(), turningPoints.size()
+            );
+
+            return AnalysisResponse.from(analysis, matchContext, turningPoints, coachFeed, diagnostics);
         } catch (IOException exception) {
-            throw new ReplayDecodingException("Could not process replay upload", exception);
+            log.error("analysis_failed id={} reason=io", analysisId, exception);
+            throw new ReplayDecodingException("Could not process replay upload. Analysis ID: " + analysisId, exception);
+        } catch (RuntimeException exception) {
+            log.error("analysis_failed id={} reason={}", analysisId, exception.getClass().getSimpleName(), exception);
+            throw exception;
         }
+    }
+
+    private static long elapsedMillis(long startedAtNanos) {
+        return Math.max(0, (System.nanoTime() - startedAtNanos) / 1_000_000);
     }
 }

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import JSZip from 'jszip';
 import './styles.css';
 
 const impactLabels = {
@@ -24,7 +25,10 @@ function App() {
     try {
       const body = new FormData();
       body.append('replay', file);
-      const response = await fetch('/api/v1/analyses', { method: 'POST', body });
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 120000);
+      const response = await fetch('/api/v1/analyses', { method: 'POST', body, signal: controller.signal });
+      clearTimeout(timeout);
       if (!response.ok) {
         const problem = await response.json().catch(() => ({}));
         throw new Error(problem.detail || 'Не удалось проанализировать реплей');
@@ -32,17 +36,22 @@ function App() {
       setAnalysis(await response.json());
       setStatus('Анализ готов');
     } catch (error) {
-      setStatus(error.message);
+      setStatus(error.name === 'AbortError'
+        ? 'Анализ занял больше двух минут. Попробуйте ещё раз или сообщите об ошибке.'
+        : error.message);
     } finally {
       setLoading(false);
     }
   }
 
-  function downloadMarkdown() {
-    if (!analysis) return;
+  function buildMarkdown() {
+    if (!analysis) return '';
     const feed = analysis.coachFeed || {};
+    const diagnostics = analysis.diagnostics || {};
     const lines = [
       '# SC2 Coach Report', '',
+      `**Analysis ID:** ${diagnostics.analysisId || '—'}`,
+      `**Версия:** ${diagnostics.applicationVersion || '—'} (${diagnostics.gitCommit || 'unknown'})`,
       `**Карта:** ${analysis.map || '—'}`,
       `**Длительность:** ${clock(analysis.gameSeconds)}`, '',
       '## Итог', '', feed.headline || 'Недостаточно данных.', '',
@@ -56,12 +65,28 @@ function App() {
     });
     lines.push('## На следующую игру', '');
     (feed.nextGameRecommendations || []).forEach((item, index) => lines.push(`${index + 1}. ${item}`));
-    downloadText(lines.join('\n'), 'sc2-coach-report.md');
+    return lines.join('\n');
+  }
+
+  function downloadMarkdown() {
+    if (!analysis) return;
+    downloadText(buildMarkdown(), 'sc2-coach-report.md');
   }
 
   function downloadTranscript() {
     if (!analysis?.transcriptMarkdown) return;
     downloadText(analysis.transcriptMarkdown, 'sc2-coach-replay-transcript.md');
+  }
+
+  async function downloadSupportBundle() {
+    if (!analysis) return;
+    const zip = new JSZip();
+    zip.file('report.md', buildMarkdown());
+    zip.file('transcript.md', analysis.transcriptMarkdown || '# Transcript unavailable\n');
+    zip.file('analysis-response.json', JSON.stringify(analysis, null, 2));
+    zip.file('metadata.json', JSON.stringify(analysis.diagnostics || {}, null, 2));
+    const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
+    downloadBlob(blob, `sc2-coach-support-${analysis.diagnostics?.analysisId || 'unknown'}.zip`);
   }
 
   return <main>
@@ -74,7 +99,7 @@ function App() {
     <section className="panel upload-panel">
       <form onSubmit={submit}>
         <label className="dropzone">
-          <input type="file" accept=".SC2Replay" onChange={e => setFile(e.target.files?.[0] || null)} />
+          <input type="file" accept=".SC2Replay" disabled={loading} onChange={e => setFile(e.target.files?.[0] || null)} />
           <strong>{file ? file.name : 'Выберите .SC2Replay'}</strong>
           <span>Реплей хранится только во временной директории</span>
         </label>
@@ -83,24 +108,26 @@ function App() {
       {status && <p className={status === 'Анализ готов' ? 'status success' : 'status'}>{status}</p>}
     </section>
 
-    {analysis && <Report analysis={analysis} onDownload={downloadMarkdown} onTranscript={downloadTranscript} />}
+    {analysis && <Report analysis={analysis} onDownload={downloadMarkdown} onTranscript={downloadTranscript} onSupportBundle={downloadSupportBundle} />}
   </main>;
 }
 
-function Report({ analysis, onDownload, onTranscript }) {
+function Report({ analysis, onDownload, onTranscript, onSupportBundle }) {
   const summary = analysis.matchContext?.summary || {};
   const feed = analysis.coachFeed || {};
   const ranking = analysis.comparison?.ranking || [];
+  const diagnostics = analysis.diagnostics || {};
   return <>
     <section className="summary-grid">
       <Metric label="Карта" value={analysis.map || '—'} />
       <Metric label="Длительность" value={clock(analysis.gameSeconds)} />
       <Metric label="Лидер в конце" value={summary.finalLeaderName || analysis.comparison?.leader || '—'} />
-      <Metric label="Уверенность" value={summary.confidence || analysis.comparison?.confidence || '—'} />
+      <Metric label="Время анализа" value={`${diagnostics.totalTimeMs || 0} мс`} />
     </section>
 
     <section className="panel feed">
-      <div className="section-heading"><div><span>Главное за матч</span><h2>{feed.headline || 'Coach Feed'}</h2></div><div className="actions"><button className="secondary" onClick={onDownload}>Скачать отчёт</button><button className="secondary" disabled={!analysis.transcriptMarkdown} onClick={onTranscript}>Скачать расшифровку для ИИ</button></div></div>
+      <div className="section-heading"><div><span>Главное за матч</span><h2>{feed.headline || 'Coach Feed'}</h2></div><div className="actions"><button className="secondary" onClick={onDownload}>Скачать отчёт</button><button className="secondary" disabled={!analysis.transcriptMarkdown} onClick={onTranscript}>Скачать расшифровку для ИИ</button><button className="secondary" onClick={onSupportBundle}>Скачать support bundle</button></div></div>
+      <p className="status">Analysis ID: <strong>{diagnostics.analysisId || '—'}</strong> · версия {diagnostics.applicationVersion || '—'} · commit {diagnostics.gitCommit || 'unknown'}</p>
       <div className="feed-grid">
         {(feed.cards || []).map((card, index) => <article className={`feed-card kind-${String(card.kind).toLowerCase()}`} key={`${card.at}-${index}`}>
           <div className="card-meta"><span>{clock(durationSeconds(card.at))}</span><span>{impactLabels[card.impact] || card.impact}</span></div>
@@ -127,7 +154,8 @@ function Report({ analysis, onDownload, onTranscript }) {
   </>;
 }
 
-function downloadText(text, filename) { const blob = new Blob([text], { type: 'text/markdown;charset=utf-8' }); const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = filename; link.click(); URL.revokeObjectURL(link.href); }
+function downloadText(text, filename) { downloadBlob(new Blob([text], { type: 'text/markdown;charset=utf-8' }), filename); }
+function downloadBlob(blob, filename) { const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = filename; link.click(); URL.revokeObjectURL(link.href); }
 function Metric({ label, value }) { return <div className="metric"><span>{label}</span><strong>{value}</strong></div>; }
 function durationSeconds(value) { const m = String(value || '').match(/^PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?$/); return m ? Number(m[1] || 0) * 3600 + Number(m[2] || 0) * 60 + Number(m[3] || 0) : Number(value || 0); }
 function clock(value) { const seconds = Math.round(Number(value || 0)); return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`; }
