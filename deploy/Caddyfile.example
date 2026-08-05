@@ -1,0 +1,32 @@
+{
+  servers {
+    timeouts {
+      read_header 10s
+      read_body 45s
+      write 3m
+      idle 30s
+    }
+  }
+}
+
+sc2-coach.example.com {
+  encode zstd gzip
+
+  request_body {
+    max_size 25MB
+  }
+
+  header {
+    X-Content-Type-Options nosniff
+    Referrer-Policy no-referrer
+    X-Frame-Options DENY
+    Permissions-Policy "camera=(), microphone=(), geolocation=()"
+  }
+
+  reverse_proxy 127.0.0.1:18080 {
+    transport http {
+      dial_timeout 5s
+      response_header_timeout 180s
+    }
+  }
+}

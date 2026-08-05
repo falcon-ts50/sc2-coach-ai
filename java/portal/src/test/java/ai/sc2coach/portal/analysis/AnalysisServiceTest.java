@@ -35,9 +35,9 @@ class AnalysisServiceTest {
             }
         };
 
-        AnalysisService service = new AnalysisService(decoder);
+        AnalysisService service = new AnalysisService(decoder, new ReplayUploadValidator());
         MockMultipartFile upload = new MockMultipartFile(
-                "replay", "../unsafe.SC2Replay", "application/octet-stream", new byte[]{1, 2, 3}
+                "replay", "../unsafe.SC2Replay", "application/octet-stream", new byte[]{'M', 'P', 'Q', 0x1A}
         );
 
         AnalysisResponse response = service.analyze(upload);
