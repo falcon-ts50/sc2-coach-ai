@@ -27,4 +27,11 @@ class Sc2DisplayNamesTest {
         assertThat(Sc2DisplayNames.upgrade("SomeFutureUpgrade"))
                 .contains("Some Future Upgrade");
     }
+
+    @Test
+    void rendersInternalUnitIdentifiersAsReadableNames() {
+        assertThat(Sc2DisplayNames.unit("RoachWarren")).isEqualTo("Roach Warren");
+        assertThat(Sc2DisplayNames.unit("SiegeTankSieged")).isEqualTo("Siege Tank (Sieged)");
+        assertThat(Sc2DisplayNames.unit("SomeFutureUnit")).isEqualTo("Some Future Unit");
+    }
 }
