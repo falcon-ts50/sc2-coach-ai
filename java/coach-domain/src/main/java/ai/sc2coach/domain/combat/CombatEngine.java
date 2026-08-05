@@ -125,6 +125,8 @@ public final class CombatEngine {
                 .filter(Objects::nonNull)
                 .filter(upgrade -> !upgrade.isBlank())
                 .filter(category)
+                .map(Sc2DisplayNames::upgrade)
+                .flatMap(java.util.Optional::stream)
                 .distinct()
                 .sorted()
                 .toList();
