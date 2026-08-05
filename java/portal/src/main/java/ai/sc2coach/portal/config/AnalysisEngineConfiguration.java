@@ -11,6 +11,7 @@ import ai.sc2coach.domain.episode.EpisodeEngine;
 import ai.sc2coach.domain.knowledge.KnowledgeEngine;
 import ai.sc2coach.domain.model.ReplayDomainMapper;
 import ai.sc2coach.domain.narrative.CoachNarrativeEngine;
+import ai.sc2coach.domain.narrative.CombatNarrativeEngine;
 import ai.sc2coach.domain.narrative.NarrativeEngine;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -29,5 +30,6 @@ public class AnalysisEngineConfiguration {
     @Bean ArgumentDeltaEngine argumentDeltaEngine() { return new ArgumentDeltaEngine(); }
     @Bean NarrativeEngine narrativeEngine() { return new NarrativeEngine(); }
     @Bean CoachNarrativeEngine coachNarrativeEngine() { return new CoachNarrativeEngine(); }
+    @Bean CombatNarrativeEngine combatNarrativeEngine() { return new CombatNarrativeEngine(); }
     @Bean CombatEngine combatEngine() { return new CombatEngine(); }
 }
