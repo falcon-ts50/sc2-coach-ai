@@ -21,7 +21,11 @@ final class Sc2DisplayNames {
             Map.entry("terraninfantryweaponslevel3", "Terran Infantry Weapons +3"),
             Map.entry("terraninfantryarmorslevel1", "Terran Infantry Armor +1"),
             Map.entry("terraninfantryarmorslevel2", "Terran Infantry Armor +2"),
-            Map.entry("terraninfantryarmorslevel3", "Terran Infantry Armor +3")
+            Map.entry("terraninfantryarmorslevel3", "Terran Infantry Armor +3"),
+            Map.entry("siegetanksieged", "Siege Tank (Sieged)"),
+            Map.entry("siegetank", "Siege Tank"),
+            Map.entry("roachwarren", "Roach Warren"),
+            Map.entry("barracksreactor", "Barracks Reactor")
     );
 
     private Sc2DisplayNames() {
@@ -32,6 +36,11 @@ final class Sc2DisplayNames {
         String key = internalName.toLowerCase(Locale.ROOT);
         if (isCosmeticOrReward(key)) return Optional.empty();
         return Optional.of(NAMES.getOrDefault(key, humanize(internalName)));
+    }
+
+    static String unit(String internalName) {
+        if (internalName == null || internalName.isBlank()) return internalName;
+        return NAMES.getOrDefault(internalName.toLowerCase(Locale.ROOT), humanize(internalName));
     }
 
     private static boolean isCosmeticOrReward(String value) {
