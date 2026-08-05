@@ -15,7 +15,8 @@ public record AnalysisResponse(
         MatchComparison.Result comparison,
         MatchContext matchContext,
         List<TurningPoint> turningPoints,
-        CoachFeed coachFeed
+        CoachFeed coachFeed,
+        String transcriptMarkdown
 ) {
     public AnalysisResponse {
         players = List.copyOf(players);
@@ -36,7 +37,8 @@ public record AnalysisResponse(
                 MatchComparison.compare(analysis),
                 matchContext,
                 turningPoints,
-                coachFeed
+                coachFeed,
+                analysis.transcriptMarkdown()
         );
     }
 
