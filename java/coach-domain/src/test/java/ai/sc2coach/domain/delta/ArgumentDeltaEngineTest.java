@@ -7,6 +7,7 @@ import java.time.Duration;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.data.Offset.offset;
 
 class ArgumentDeltaEngineTest {
 
@@ -23,7 +24,7 @@ class ArgumentDeltaEngineTest {
 
         assertThat(deltas).anySatisfy(delta -> {
             assertThat(delta.component()).isEqualTo(ArgumentDelta.Component.ARMY);
-            assertThat(delta.relativeChangePercent()).isEqualTo(-55.0);
+            assertThat(delta.relativeChangePercent()).isCloseTo(-55.0, offset(0.0001));
             assertThat(delta.significance()).isEqualTo(ArgumentDelta.Significance.CRITICAL);
         });
     }
