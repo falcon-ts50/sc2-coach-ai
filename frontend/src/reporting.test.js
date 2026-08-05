@@ -70,6 +70,66 @@ test('renders backend-owned narrative analysis without strategic inference', () 
           points: [{ at: 'PT0S', value: 0 }, { at: 'PT420S', value: 900 }],
         }],
       },
+      evidence: {
+        participants: [
+          { id: 'participant-dragondriver', displayName: 'dragonDriver', relationship: 'SELECTED' },
+          { id: 'participant-lulu', displayName: 'Lulu', relationship: 'TEAMMATE' },
+        ],
+        metricComparisons: [{
+          label: 'Стоимость армии',
+          completeness: 'COMPLETE',
+          series: [
+            {
+              participantId: 'participant-dragondriver',
+              completeness: 'COMPLETE',
+              lineStyle: 'solid',
+              points: [{ at: 'PT0S', value: 100 }, { at: 'PT420S', value: 900 }],
+            },
+            {
+              participantId: 'participant-lulu',
+              completeness: 'PARTIAL',
+              lineStyle: 'dashed',
+              points: [{ at: 'PT0S', value: 80 }, { at: 'PT420S', value: 700 }],
+            },
+          ],
+        }],
+        combats: [{
+          label: 'Бой 2',
+          startedAt: 'PT373S',
+          endedAt: 'PT423S',
+          sides: [{
+            label: 'Команда фокуса',
+            completeness: 'COMPLETE',
+            totalRows: [{
+              unit: 'Zergling',
+              startCount: 2,
+              additions: 16,
+              losses: 3,
+              endCount: 15,
+              creditedKills: { value: null, completeness: 'UNAVAILABLE' },
+              reconciliationStatus: 'EXACT',
+            }],
+            participants: [{
+              player: 'Lulu',
+              reconciliationStatus: 'EXACT',
+              completeness: 'COMPLETE',
+              rows: [{
+                unit: 'Zergling',
+                startCount: 2,
+                additions: 16,
+                losses: 3,
+                endCount: 15,
+                creditedKills: { value: null, completeness: 'UNAVAILABLE' },
+                reconciliationStatus: 'EXACT',
+              }],
+              workerLosses: { Drone: 1 },
+              structureLosses: {},
+              staticDefenseLosses: {},
+            }],
+          }],
+          notes: ['Kill attribution is unavailable.'],
+        }],
+      },
       limitations: ['Replay does not prove intent.'],
     },
     combats: [],
@@ -79,6 +139,10 @@ test('renders backend-owned narrative analysis without strategic inference', () 
   assert.match(markdown, /Strategic result: NOT_EVALUATED/);
   assert.match(markdown, /Раннее давление/);
   assert.match(markdown, /Стоимость армии: COMPLETE, 2 точек/);
+  assert.match(markdown, /dragonDriver \(фокус\): COMPLETE, solid, 2 точек/);
+  assert.match(markdown, /Lulu \(союзник\): PARTIAL, dashed, 2 точек/);
+  assert.match(markdown, /Zergling: старт 2, новые 16, потери 3, финиш 15, kills нет данных, EXACT/);
+  assert.match(markdown, /Рабочие: 1 × Drone/);
   assert.doesNotMatch(markdown, /guaranteed win|caused/i);
 });
 

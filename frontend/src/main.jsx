@@ -67,10 +67,11 @@ function Report({ analysis, focusPlayer, setFocusPlayer, rebuild, loading, onDow
   const feed = analysis.coachFeed || {};
   const narrativeCard = (feed.cards || []).find(card => card.title === 'Как развивался матч');
   const events = (feed.cards || []).filter(card => card !== narrativeCard);
+  const combatEvidenceById = new Map((analysis.narrativeAnalysis?.evidence?.combats || []).map(combat => [combat.id, combat]));
   return <article className="report">
     <section className="report-header panel"><div><span className="eyebrow">РАЗБОР ДЛЯ ИГРОКА</span><h2>{analysis.focusPlayer || focusPlayer}</h2><p>{feed.headline}</p></div><div className="perspective"><label>Для кого сделать отчёт</label><select value={focusPlayer} onChange={event => setFocusPlayer(event.target.value)}>{(analysis.players || []).map(player => <option key={player.pid} value={player.name}>{player.name} · {player.race}</option>)}</select><button disabled={loading || focusPlayer === analysis.focusPlayer} onClick={rebuild}>Перестроить отчёт</button></div></section>
     <NarrativeAnalysisSection narrative={analysis.narrativeAnalysis} />
-    <section className="report-section"><span className="section-number">02</span><div className="wide"><h2>История боёв</h2><div className="combat-list">{(analysis.combats || []).length ? analysis.combats.map((combat, index) => <CombatBlock combat={combat} index={index} key={combat.id || `${combat.startedAt}-${index}`} />) : <p className="muted">Не удалось надёжно восстановить отдельные боевые эпизоды.</p>}</div></div></section>
+    <section className="report-section"><span className="section-number">02</span><div className="wide"><h2>История боёв</h2><div className="combat-list">{(analysis.combats || []).length ? analysis.combats.map((combat, index) => <CombatBlock combat={combat} evidence={combatEvidenceById.get(combat.id)} index={index} key={combat.id || `${combat.startedAt}-${index}`} />) : <p className="muted">Не удалось надёжно восстановить отдельные боевые эпизоды.</p>}</div></div></section>
     <section className="report-section"><span className="section-number">03</span><div className="wide"><h2>Переломные моменты</h2><div className="story-list">{events.map((card, index) => <div className="story-row" key={`${card.at}-${index}`}><time>{clock(durationSeconds(card.at))}</time><div><h3>{card.title}</h3><p>{card.explanation}</p><small>Уверенность {Math.round((card.confidence || 0) * 100)}%</small></div></div>)}</div></div></section>
     <section className="report-section"><span className="section-number">04</span><div className="wide"><h2>Что изменить в следующей игре</h2><ol className="next-actions">{(feed.nextGameRecommendations || []).map(item => <li key={item}>{item}</li>)}</ol></div></section>
     <footer className="report-footer panel"><div className="actions"><button onClick={onDownload}>Скачать отчёт</button><button onClick={onTranscript}>Расшифровка для ИИ</button><button onClick={onSupportBundle}>Support bundle</button></div><small>Analysis ID: {analysis.diagnostics?.analysisId || '—'} · {analysis.diagnostics?.applicationVersion || '—'} · {analysis.diagnostics?.totalTimeMs || 0} мс</small></footer>
@@ -78,11 +79,17 @@ function Report({ analysis, focusPlayer, setFocusPlayer, rebuild, loading, onDow
 }
 
 function NarrativeAnalysisSection({ narrative }) {
-  const [selectedPhaseId, setSelectedPhaseId] = useState(narrative?.timeline?.phases?.[0]?.id || '');
+  const [selectedFocusId, setSelectedFocusId] = useState(narrative?.evidence?.focuses?.[0]?.id || '');
+  const [hoverAt, setHoverAt] = useState(null);
   if (!narrative) return null;
   const phases = narrative.timeline?.phases || [];
-  const selected = phases.find(phase => phase.id === selectedPhaseId) || phases[0];
-  const chart = withOverallScoreSeries(narrative.chart, narrative.timeline?.snapshots || []);
+  const evidence = narrative.evidence || {};
+  const focuses = evidence.focuses || [];
+  const selected = focuses.find(focus => focus.id === selectedFocusId) || focuses[0];
+  const metrics = evidence.metricComparisons?.length
+    ? evidence.metricComparisons
+    : legacyMetricComparisons(withOverallScoreSeries(narrative.chart, narrative.timeline?.snapshots || []), narrative);
+  const participants = evidence.participants || [];
   const team = (narrative.focusTeamPlayers || []).join(', ') || '—';
 
   return <section className="report-section"><span className="section-number">01</span><div className="wide">
@@ -91,13 +98,33 @@ function NarrativeAnalysisSection({ narrative }) {
       <p className="lead">Официальный результат для {narrative.focusPlayer || 'игрока'}: <strong>{narrative.officialReplayResult || 'не определён'}</strong>.</p>
       <dl className="summary-facts"><dt>Команда</dt><dd>{team}</dd></dl>
     </div>
-    <div className="phase-list">{phases.map(phase => <button className={phase.id === selected?.id ? 'phase selected' : 'phase'} key={phase.id} onClick={() => setSelectedPhaseId(phase.id)}>
+    <div className="phase-list">{phases.map(phase => {
+      const focus = focuses.find(item => item.sourceId === phase.id);
+      return <button className={focus?.id === selected?.id ? 'phase selected' : 'phase'} key={phase.id} onClick={() => setSelectedFocusId(focus?.id || '')}>
       <time>{clock(durationSeconds(phase.startedAt))}–{clock(durationSeconds(phase.endedAt))}</time>
       <strong>{phase.title}</strong>
       <span>{phase.summary}</span>
-    </button>)}</div>
-    <div className="charts-stack">{(chart?.series || []).map((series, index) => <NarrativeChart key={series.id} chart={chart} series={series} selectedPhaseId={selected?.id} colorIndex={index} />)}</div>
+    </button>;
+    })}</div>
+    <div className="evidence-legend">{participants.map((participant, index) => <span className={`legend-item ${participant.relationship?.toLowerCase() || 'unknown'}`} key={participant.id}><i style={{ background: participantColor(index) }} />{participant.displayName}<small>{relationshipText(participant)}</small></span>)}</div>
+    <div className="charts-stack">{metrics.map(metric => <MetricComparisonChart key={metric.id} metric={metric} participants={participants} focuses={focuses} selected={selected} hoverAt={hoverAt} onHover={setHoverAt} onFocus={setSelectedFocusId} />)}</div>
   </div></section>;
+}
+
+function legacyMetricComparisons(chart, narrative) {
+  const participant = {
+    id: 'participant-focus',
+    displayName: narrative.focusPlayer || 'Фокус',
+    relationship: 'SELECTED',
+    selected: true,
+  };
+  return (chart?.series || []).map(series => ({
+    id: series.id,
+    label: series.label,
+    unit: series.unit,
+    completeness: series.completeness,
+    series: [{ id: `${series.id}-focus`, participantId: participant.id, completeness: series.completeness, lineStyle: 'solid', strokeWeight: 5, points: series.points || [] }],
+  }));
 }
 
 function withOverallScoreSeries(chart, snapshots) {
@@ -108,12 +135,14 @@ function withOverallScoreSeries(chart, snapshots) {
   return { ...chart, series: [...existing, { id: 'overallScore', label: 'Общее преимущество', unit: 'баллы', points }] };
 }
 
-function NarrativeChart({ chart, series, selectedPhaseId, colorIndex }) {
-  const points = series.points || [];
-  const start = durationSeconds(chart?.startedAt);
-  const end = durationSeconds(chart?.endedAt);
+function MetricComparisonChart({ metric, participants, focuses, selected, hoverAt, onHover, onFocus }) {
+  const visibleSeries = metric.series || [];
+  const participantById = new Map((participants || []).map((participant, index) => [participant.id, { ...participant, color: participantColor(index) }]));
+  const allPoints = visibleSeries.flatMap(series => series.points || []);
+  const start = Math.min(...allPoints.map(point => durationSeconds(point.at)), durationSeconds(selected?.from), 0);
+  const end = Math.max(...allPoints.map(point => durationSeconds(point.at)), durationSeconds(selected?.to), 1);
   const duration = Math.max(1, end - start);
-  const values = points.map(point => Number(point.value || 0));
+  const values = allPoints.map(point => Number(point.value || 0));
   const rawMin = Math.min(0, ...values);
   const rawMax = Math.max(1, ...values);
   const span = Math.max(1, rawMax - rawMin);
@@ -129,16 +158,23 @@ function NarrativeChart({ chart, series, selectedPhaseId, colorIndex }) {
   const plotHeight = height - top - bottom;
   const x = value => left + (durationSeconds(value) - start) / duration * plotWidth;
   const y = value => top + (maxValue - Number(value || 0)) / (maxValue - minValue) * plotHeight;
-  const colors = ['#74d7ff', '#ffd166', '#9bf6a5', '#c69cff'];
-  const color = colors[colorIndex % colors.length];
+  const dash = style => style === 'dashed' ? '12 8' : style === 'dotted' ? '3 8' : style === 'dashdot' ? '12 6 3 6' : undefined;
   const xTicks = [0, .25, .5, .75, 1];
   const yTicks = [0, .25, .5, .75, 1];
+  const focusFrom = selected ? x(selected.from) : null;
+  const focusTo = selected ? x(selected.to) : null;
+  const hoverX = hoverAt == null ? null : left + (Number(hoverAt) - start) / duration * plotWidth;
+  const pointerMove = event => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const ratio = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width));
+    onHover(Math.round(start + ratio * duration));
+  };
 
   return <section className="chart-card">
-    <header className="chart-title"><h3>{series.label}</h3><span>{series.unit || ''}</span></header>
+    <header className="chart-title"><h3>{metric.label}</h3><span>{metric.unit || ''} · {metric.completeness || '—'}</span></header>
     <div className="chart-scroll">
-      <svg className="narrative-chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`${series.label} по времени матча`}>
-        {(chart?.phaseIntervals || []).map(interval => <rect key={interval.id} className={interval.phaseId === selectedPhaseId ? 'phase-band active' : 'phase-band'} x={x(interval.from)} y={top} width={Math.max(2, x(interval.to) - x(interval.from))} height={plotHeight} />)}
+      <svg className="narrative-chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`${metric.label} по времени матча`} onPointerMove={pointerMove} onPointerLeave={() => onHover(null)}>
+        {selected && <rect className="phase-band active" x={Math.min(focusFrom, focusTo)} y={top} width={Math.max(2, Math.abs(focusTo - focusFrom))} height={plotHeight} />}
         {yTicks.map(step => {
           const value = maxValue - step * (maxValue - minValue);
           const yy = top + step * plotHeight;
@@ -151,9 +187,13 @@ function NarrativeChart({ chart, series, selectedPhaseId, colorIndex }) {
         })}
         <line className="axis-line" x1={left} x2={left} y1={top} y2={height - bottom} />
         <line className="axis-line" x1={left} x2={width - right} y1={height - bottom} y2={height - bottom} />
-        <polyline fill="none" stroke={color} strokeWidth="4" strokeLinejoin="round" strokeLinecap="round" points={points.map(point => `${x(point.at)},${y(point.value)}`).join(' ')} />
-        {(chart?.markers || []).map(marker => <line key={marker.id} className="marker-line" x1={x(marker.at)} x2={x(marker.at)} y1={top} y2={height - bottom} />)}
-        <text className="axis-title" x={18} y={top + plotHeight / 2} transform={`rotate(-90 18 ${top + plotHeight / 2})`} textAnchor="middle">{series.unit || series.label}</text>
+        {visibleSeries.map(series => {
+          const participant = participantById.get(series.participantId) || {};
+          return <polyline key={series.id} fill="none" stroke={participant.color || '#dbe7f5'} strokeWidth={series.strokeWeight || 2} strokeLinejoin="round" strokeLinecap="round" strokeDasharray={dash(series.lineStyle)} points={(series.points || []).map(point => `${x(point.at)},${y(point.value)}`).join(' ')} />;
+        })}
+        {focuses.filter(focus => focus.kind === 'COMBAT' || focus.kind === 'TURNING_POINT').map(focus => <line key={focus.id} className={focus.id === selected?.id ? 'marker-line active' : 'marker-line'} x1={x(focus.at)} x2={x(focus.at)} y1={top} y2={height - bottom} onClick={() => onFocus(focus.id)} />)}
+        {hoverX != null && hoverX >= left && hoverX <= width - right && <g><line className="crosshair-line" x1={hoverX} x2={hoverX} y1={top} y2={height - bottom} /><text className="axis-label crosshair-label" x={hoverX + 8} y={top + 16}>{clock(hoverAt)}</text></g>}
+        <text className="axis-title" x={18} y={top + plotHeight / 2} transform={`rotate(-90 18 ${top + plotHeight / 2})`} textAnchor="middle">{metric.unit || metric.label}</text>
         <text className="axis-title" x={left + plotWidth / 2} y={height - 6} textAnchor="middle">Время матча</text>
       </svg>
     </div>
@@ -166,9 +206,10 @@ function formatAxisValue(value) {
   return `${Math.round(value)}`;
 }
 
-function CombatBlock({ combat, index }) {
+function CombatBlock({ combat, evidence, index }) {
   return <section className="combat-block">
     <div className="combat-title"><time>{clock(durationSeconds(combat.startedAt))}</time><div><h3>{combat.ordinalLabel || `Бой ${index + 1}`} · {combat.initiator || 'Игрок'} атакует {combat.opponent || 'соперника'}</h3><p>{clock(durationSeconds(combat.startedAt))}–{clock(durationSeconds(combat.endedAt))}. {combat.location ? `Координаты команды: ${combat.location}.` : ''}</p></div></div>
+    {evidence && <CombatEvidenceTable evidence={evidence} />}
     <div className="combat-participants">{(combat.participants || []).map(player => <div key={player.player}>
       <h4>{player.player}</h4>
       <dl>
@@ -186,6 +227,61 @@ function CombatBlock({ combat, index }) {
       </dl>
     </div>)}</div>
   </section>;
+}
+
+function CombatEvidenceTable({ evidence }) {
+  return <div className="combat-evidence">
+    {(evidence.sides || []).map(side => <section className="combat-side" key={side.id}>
+      <h4>{side.label} <small>{side.completeness || '—'}</small></h4>
+      <UnitEvidenceTable rows={side.totalRows || []} caption="Итого по стороне" />
+      {(side.participants || []).map(participant => <div className="participant-evidence" key={participant.participantId}>
+        <h5>{participant.player} <small>{participant.reconciliationStatus || '—'}</small></h5>
+        <UnitEvidenceTable rows={participant.rows || []} caption="Боевые юниты" />
+        <dl className="collateral-losses">
+          <dt>Рабочие</dt><dd>{composition(participant.workerLosses)}</dd>
+          <dt>Здания</dt><dd>{composition(participant.structureLosses)}</dd>
+          <dt>Оборона</dt><dd>{composition(participant.staticDefenseLosses)}</dd>
+        </dl>
+      </div>)}
+    </section>)}
+    {(evidence.notes || []).length > 0 && <p className="evidence-note">{evidence.notes.join(' ')}</p>}
+  </div>;
+}
+
+function UnitEvidenceTable({ rows, caption }) {
+  if (!rows.length) return <p className="muted">{caption}: нет боевых юнитов.</p>;
+  return <div className="unit-table-wrap" role="region" aria-label={caption}>
+    <table className="unit-evidence-table">
+      <caption>{caption}</caption>
+      <thead><tr><th>Юнит</th><th>Старт</th><th>Новые</th><th>Потери</th><th>Финиш</th><th>Kills</th></tr></thead>
+      <tbody>{rows.map(row => <tr key={row.unit}>
+        <th scope="row">{row.unit}<small>{row.completeness || '—'}</small></th>
+        <td>{row.startCount}</td>
+        <td>{row.additions}</td>
+        <td>{row.losses}</td>
+        <td>{row.endCount}</td>
+        <td>{countEvidence(row.creditedKills)}</td>
+      </tr>)}</tbody>
+    </table>
+  </div>;
+}
+
+function countEvidence(value) {
+  if (!value || value.value == null) return 'нет данных';
+  return value.value;
+}
+
+function participantColor(index) {
+  return ['#8bdcff', '#f6d36f', '#a7f3b3', '#d7b4ff', '#ffb3c7', '#b8c8ff'][index % 6];
+}
+
+function relationshipText(participant) {
+  return {
+    SELECTED: 'фокус',
+    TEAMMATE: 'союзник',
+    OPPONENT: 'соперник',
+    UNKNOWN: 'роль неизвестна',
+  }[participant.relationship] || 'роль неизвестна';
 }
 
 function downloadText(text, filename) { downloadBlob(new Blob([text || ''], { type: 'text/markdown;charset=utf-8' }), filename); }

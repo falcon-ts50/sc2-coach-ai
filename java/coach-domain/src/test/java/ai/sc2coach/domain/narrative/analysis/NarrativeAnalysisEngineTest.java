@@ -49,9 +49,65 @@ class NarrativeAnalysisEngineTest {
 
         assertThat(analysis.focusPlayer()).isEqualTo("dragonDriver");
         assertThat(analysis.focusTeamPlayers()).containsExactly("Lulu", "dragonDriver");
+        assertThat(analysis.evidence().participants()).extracting(NarrativeEvidence.ParticipantIdentity::displayName)
+                .containsExactly("dragonDriver", "Lulu", "Frontdoor", "Guardian");
+        assertThat(analysis.evidence().participants().getFirst().relationship())
+                .isEqualTo(NarrativeEvidence.Relationship.SELECTED);
+        assertThat(analysis.evidence().participants().getFirst().styleKey())
+                .contains("pid-3");
         assertThat(analysis.timeline().snapshots()).allSatisfy(snapshot ->
                 assertThat(snapshot.teamPlayers()).contains("Lulu", "dragonDriver")
         );
+    }
+
+    @Test
+    void emitsAllParticipantMetricComparisonsOnSharedDomain() {
+        NarrativeAnalysis analysis = engine.analyze(input());
+
+        assertThat(analysis.evidence().metricComparisons()).extracting(NarrativeEvidence.MetricComparison::id)
+                .containsExactly("armyValue", "economyProxy", "supplyUsed");
+        NarrativeEvidence.MetricComparison army = analysis.evidence().metricComparisons().getFirst();
+
+        assertThat(army.series()).hasSize(4);
+        assertThat(army.series().getFirst().lineStyle()).isEqualTo("solid");
+        assertThat(army.series().getFirst().strokeWeight()).isGreaterThan(army.series().get(1).strokeWeight());
+        assertThat(army.series().getFirst().points()).hasSameSizeAs(analysis.timeline().snapshots());
+        assertThat(army.series()).anySatisfy(series ->
+                assertThat(series.completeness()).isEqualTo(NarrativeChartModel.Completeness.UNAVAILABLE)
+        );
+    }
+
+    @Test
+    void exposesCombatEvidenceWithoutInventingKillCredit() {
+        NarrativeAnalysis analysis = engine.analyze(inputWithCombatParticipants());
+
+        NarrativeEvidence.CombatEvidence combat = analysis.evidence().combats().getFirst();
+        assertThat(combat.sides()).extracting(NarrativeEvidence.CombatSideEvidence::label)
+                .containsExactly("Команда фокуса", "Соперники");
+        NarrativeEvidence.CombatParticipantEvidence lulu = combat.sides().getFirst().participants().stream()
+                .filter(participant -> participant.player().equals("Lulu"))
+                .findFirst()
+                .orElseThrow();
+        NarrativeEvidence.UnitEvidenceRow row = lulu.rows().stream()
+                .filter(unit -> unit.unit().equals("Zergling"))
+                .findFirst()
+                .orElseThrow();
+
+        assertThat(row.startCount()).isEqualTo(2);
+        assertThat(row.additions()).isEqualTo(16);
+        assertThat(row.losses()).isEqualTo(3);
+        assertThat(row.endCount()).isEqualTo(15);
+        assertThat(row.creditedKills().value()).isNull();
+        assertThat(row.creditedKills().completeness()).isEqualTo(NarrativeChartModel.Completeness.UNAVAILABLE);
+    }
+
+    @Test
+    void ordersEqualTimestampFocusesDeterministically() {
+        NarrativeAnalysis analysis = engine.analyze(inputWithCombatParticipants());
+
+        assertThat(analysis.evidence().focuses())
+                .extracting(focus -> focus.kind() + ":" + focus.sourceId())
+                .containsSubsequence("COMBAT:combat-2", "TURNING_POINT:turning-point-1");
     }
 
     @Test
@@ -87,6 +143,62 @@ class NarrativeAnalysisEngineTest {
                         TurningPoint.Severity.MAJOR, List.of())
         );
         return new NarrativeAnalysisInput(match, "dragonDriver", context, turningPoints, List.of(), combats, null, List.of());
+    }
+
+    private NarrativeAnalysisInput inputWithCombatParticipants() {
+        Match match = new Match("Test Map", "2v2", Duration.ofMinutes(20), List.of("dragonDriver", "Lulu"),
+                List.of(player(1, "Frontdoor", 1, "Loss"), player(2, "Guardian", 1, "Loss"),
+                        player(3, "dragonDriver", 2, "Win"), player(4, "Lulu", 2, "Win")));
+        Combat.Participant lulu = new Combat.Participant(
+                "Lulu",
+                Map.of("Zergling", 2),
+                Map.of("Zergling", 16),
+                Map.of("Zergling", 15),
+                Map.of("Zergling", 3),
+                Map.of("Drone", 1),
+                Map.of(),
+                Map.of(),
+                List.of(),
+                List.of(),
+                250,
+                850,
+                Combat.ReconciliationStatus.EXACT,
+                List.of()
+        );
+        Combat.Participant frontdoor = new Combat.Participant(
+                "Frontdoor",
+                Map.of("Marine", 5),
+                Map.of(),
+                Map.of("Marine", 4),
+                Map.of("Marine", 1),
+                Map.of(),
+                Map.of(),
+                Map.of(),
+                List.of(),
+                List.of(),
+                250,
+                200,
+                Combat.ReconciliationStatus.EXACT,
+                List.of()
+        );
+        List<Combat> combats = List.of(new Combat(Duration.ofSeconds(370), Duration.ofSeconds(423),
+                "Frontdoor", "Lulu", null, List.of(lulu, frontdoor), "110,92", 0.82, "combat-2", "Бой 2"));
+        List<TurningPoint> turningPoints = List.of(
+                new TurningPoint(Duration.ofSeconds(370), 1, "Frontdoor", 3, "dragonDriver", 42,
+                        TurningPoint.Severity.MAJOR, List.of())
+        );
+        return new NarrativeAnalysisInput(match, "dragonDriver", context(), turningPoints, List.of(), combats, null, List.of());
+    }
+
+    private MatchContext context() {
+        return new MatchContext(List.of(
+                frame(0, 500, 400, 14, 20),
+                frame(240, 120, 500, 18, -35),
+                frame(420, 820, 850, 39, 5),
+                frame(840, 1600, 1350, 72, 45),
+                frame(1080, 1400, 1200, 66, 15),
+                frame(1260, 500, 400, 14, -74)
+        ), MatchContext.MatchSummary.empty());
     }
 
     private PlayerState player(int pid, String name, int team, String result) {
