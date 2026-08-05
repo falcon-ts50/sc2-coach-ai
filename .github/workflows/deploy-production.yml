@@ -29,7 +29,7 @@ jobs:
       - run: python scripts/release_version.py --check-sync
 
   java-build:
-    name: java and image build
+    name: java verification
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -49,8 +49,6 @@ jobs:
       - name: Test Java modules
         working-directory: java
         run: mvn --batch-mode --no-transfer-progress verify
-      - name: Build production image
-        run: docker build --build-arg APP_VERSION="$(cat VERSION)" -t sc2-coach-ai:ci .
 
   tag:
     name: tag release

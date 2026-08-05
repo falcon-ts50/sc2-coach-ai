@@ -12,7 +12,7 @@ COPY --from=frontend-build /src/frontend/dist ./java/portal/src/main/resources/s
 RUN cd java && mvn --batch-mode --no-transfer-progress -DskipTests package
 
 FROM eclipse-temurin:25-jre
-ARG APP_VERSION=0.8.1-SNAPSHOT
+ARG APP_VERSION=0.8.2-SNAPSHOT
 ARG BUILD_NUMBER=local
 ARG BUILD_TIME=unknown
 ARG GIT_COMMIT=unknown
