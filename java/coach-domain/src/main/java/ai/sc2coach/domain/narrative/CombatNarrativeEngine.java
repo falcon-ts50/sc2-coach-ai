@@ -17,7 +17,7 @@ public final class CombatNarrativeEngine {
                 .toList();
         var opening = ordered.getFirst();
         var decisive = ordered.stream()
-                .max(Comparator.comparingDouble(this::focusArmyLossShare))
+                .max(Comparator.comparingDouble(combat -> focusArmyLossShare(combat, focusPlayer)))
                 .orElse(opening);
         var last = ordered.getLast();
 
@@ -31,8 +31,8 @@ public final class CombatNarrativeEngine {
     private String introduction(String focusPlayer, Combat combat) {
         String subject = focusPlayer == null ? "Выбранный игрок" : focusPlayer;
         String action = subject.equalsIgnoreCase(combat.initiator())
-                ? "начал атаку на " + safe(combat.opponent(), "соперника")
-                : safe(combat.initiator(), "Соперник") + " атаковал " + subject;
+                ? "атаковал позиции " + safe(combat.opponent(), "команды соперника")
+                : safe(combat.initiator(), "Соперник") + " начал атаку, в которой участвовал " + subject;
         return "Первый надёжно восстановленный бой начался на " + clock(combat.startedAt().toSeconds())
                 + ": " + action + ". " + resultSentence(subject, combat);
     }
@@ -49,7 +49,7 @@ public final class CombatNarrativeEngine {
 
         return prefix + " стал бой на " + clock(combat.startedAt().toSeconds()) + ". До него армия "
                 + participant.player() + " включала " + before + "; после боя осталось " + after
-                + ". За эпизод потеряно: " + losses + ". Стоимость армии изменилась с "
+                + ". Боевые потери: " + losses + ". Стоимость армии изменилась с "
                 + Math.round(participant.armyValueBefore()) + " до " + Math.round(participant.armyValueAfter())
                 + " ресурсов (" + signed(change) + "%). " + resultSentence(participant.player(), combat);
     }
@@ -58,18 +58,24 @@ public final class CombatNarrativeEngine {
         String subject = focusPlayer == null ? "выбранного игрока" : focusPlayer;
         String finalResult = combat.winner() == null
                 ? "результат последнего боя нельзя определить надёжно"
-                : combat.winner().equalsIgnoreCase(focusPlayer)
-                    ? "последний бой остался за " + subject
-                    : "последний бой выиграл " + combat.winner();
+                : winnerContains(combat.winner(), focusPlayer)
+                    ? "последний бой остался за командой " + subject
+                    : "в последнем бою преимущество получила команда " + combat.winner();
         return "Всего выделено " + count + " боевых эпизодов; " + finalResult + ". "
                 + (fallback == null ? "" : fallback);
     }
 
     private String resultSentence(String player, Combat combat) {
         if (combat.winner() == null) return "Победитель эпизода не определён из доступных событий.";
-        return combat.winner().equalsIgnoreCase(player)
-                ? player + " закончил размен с меньшими потерями."
-                : "Размен выиграл " + combat.winner() + ".";
+        return winnerContains(combat.winner(), player)
+                ? "Команда " + player + " закончила размен с меньшим суммарным ущербом."
+                : "Меньший суммарный ущерб понесла команда " + combat.winner() + ".";
+    }
+
+    private boolean winnerContains(String winner, String player) {
+        if (winner == null || player == null) return false;
+        return java.util.Arrays.stream(winner.split("\\s+и\\s+"))
+                .anyMatch(name -> name.equalsIgnoreCase(player));
     }
 
     private Combat.Participant participant(Combat combat, String focusPlayer) {
@@ -79,15 +85,15 @@ public final class CombatNarrativeEngine {
                 .orElseGet(() -> combat.participants().stream().findFirst().orElse(null));
     }
 
-    private double focusArmyLossShare(Combat combat) {
-        return combat.participants().stream()
-                .mapToDouble(participant -> participant.armyValueBefore() <= 0 ? 0
-                        : Math.max(0, participant.armyValueBefore() - participant.armyValueAfter()) / participant.armyValueBefore())
-                .max().orElse(0);
+    private double focusArmyLossShare(Combat combat, String focusPlayer) {
+        var participant = participant(combat, focusPlayer);
+        if (participant == null || participant.armyValueBefore() <= 0) return 0;
+        return Math.max(0, participant.armyValueBefore() - participant.armyValueAfter())
+                / participant.armyValueBefore();
     }
 
     private String composition(Map<String, Integer> composition) {
-        if (composition == null || composition.isEmpty()) return "состав не восстановлен";
+        if (composition == null || composition.isEmpty()) return "нет подтверждённых потерь";
         return composition.entrySet().stream()
                 .limit(8)
                 .map(entry -> entry.getValue() + " × " + entry.getKey())
