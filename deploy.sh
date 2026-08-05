@@ -2,9 +2,9 @@
 set -Eeuo pipefail
 
 BRANCH="${SC2_COACH_BRANCH:-main}"
-PORT="${SC2_COACH_PORT:-18080}"
+PORT="${SC2_COACH_PORT:?SC2_COACH_PORT must be configured on the deployment host}"
 
-printf 'Updating SC2 Coach from %s...\n' "$BRANCH"
+printf 'Updating SC2 Match Review from %s...\n' "$BRANCH"
 git fetch --prune origin
 git checkout "$BRANCH"
 git pull --ff-only origin "$BRANCH"
@@ -26,11 +26,11 @@ printf 'Building version %s, build %s, commit %s...\n' "$APP_VERSION" "$BUILD_NU
 docker compose build --pull
 docker compose up -d --remove-orphans
 
-printf 'Waiting for http://127.0.0.1:%s ...\n' "$PORT"
+printf 'Waiting for the local application endpoint...\n'
 for attempt in $(seq 1 30); do
   if curl --fail --silent --show-error "http://127.0.0.1:${PORT}/" >/dev/null; then
     docker compose ps
-    printf 'SC2 Coach %s build %s (%s) is ready.\n' "$APP_VERSION" "$BUILD_NUMBER" "$GIT_COMMIT"
+    printf 'SC2 Match Review %s build %s (%s) is ready.\n' "$APP_VERSION" "$BUILD_NUMBER" "$GIT_COMMIT"
     exit 0
   fi
   sleep 2
