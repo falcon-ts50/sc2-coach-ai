@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import JSZip from 'jszip';
+import { buildMarkdown, clock, composition, durationSeconds, listText, narrativeText, reconciliationText } from './reporting.js';
 import './styles.css';
 
 function App() {
@@ -38,44 +39,11 @@ function App() {
     }
   }
 
-  function buildMarkdown() {
-    if (!analysis) return '';
-    const lines = [
-      '# SC2 Coach Report', '',
-      `**Разбор для:** ${analysis.focusPlayer || '—'}`,
-      `**Карта:** ${analysis.map || '—'}`,
-      `**Длительность:** ${clock(analysis.gameSeconds)}`, '',
-      '## Итог', '', analysis.coachFeed?.headline || 'Недостаточно данных.', '',
-      '## Как развивался матч', '', narrativeText(analysis), '',
-      '## Ключевые бои', ''
-    ];
-    (analysis.combats || []).forEach(combat => {
-      lines.push(`### ${clock(durationSeconds(combat.startedAt))} — ${combat.initiator || 'Игрок'} атакует ${combat.opponent || 'соперника'}`);
-      lines.push(`Победитель эпизода: **${combat.winner || 'не определён'}**.`);
-      (combat.participants || []).forEach(player => {
-        lines.push('', `**${player.player}**`,
-          `- Армия до боя: ${composition(player.armyBefore)}`,
-          `- Армия после боя: ${composition(player.armyAfter)}`,
-          `- Боевые потери: ${composition(player.unitsLost)}`,
-          `- Рабочие: ${composition(player.workersLost)}`,
-          `- Здания: ${composition(player.structuresLost)}`,
-          `- Статическая оборона: ${composition(player.staticDefenseLost)}`,
-          `- Грейды: ${listText(player.upgrades)}`,
-          `- Ключевые технологии: ${listText(player.technologies)}`,
-          `- Стоимость армии: ${Math.round(player.armyValueBefore || 0)} → ${Math.round(player.armyValueAfter || 0)}`);
-      });
-      lines.push('');
-    });
-    lines.push('## Что сделать в следующей игре', '');
-    (analysis.coachFeed?.nextGameRecommendations || []).forEach((item, index) => lines.push(`${index + 1}. ${item}`));
-    return lines.join('\n');
-  }
-
-  function downloadMarkdown() { downloadText(buildMarkdown(), 'sc2-coach-report.md'); }
+  function downloadMarkdown() { downloadText(buildMarkdown(analysis), 'sc2-coach-report.md'); }
   function downloadTranscript() { downloadText(analysis.transcriptMarkdown, 'sc2-coach-replay-transcript.md'); }
   async function downloadSupportBundle() {
     const zip = new JSZip();
-    zip.file('report.md', buildMarkdown());
+    zip.file('report.md', buildMarkdown(analysis));
     zip.file('transcript.md', analysis.transcriptMarkdown || '# Transcript unavailable\n');
     zip.file('analysis-response.json', JSON.stringify(analysis, null, 2));
     zip.file('metadata.json', JSON.stringify(analysis.diagnostics || {}, null, 2));
@@ -102,39 +70,36 @@ function Report({ analysis, focusPlayer, setFocusPlayer, rebuild, loading, onDow
   return <article className="report">
     <section className="report-header panel"><div><span className="eyebrow">РАЗБОР ДЛЯ ИГРОКА</span><h2>{analysis.focusPlayer || focusPlayer}</h2><p>{feed.headline}</p></div><div className="perspective"><label>Для кого сделать отчёт</label><select value={focusPlayer} onChange={event => setFocusPlayer(event.target.value)}>{(analysis.players || []).map(player => <option key={player.pid} value={player.name}>{player.name} · {player.race}</option>)}</select><button disabled={loading || focusPlayer === analysis.focusPlayer} onClick={rebuild}>Перестроить отчёт</button></div></section>
     <section className="report-section"><span className="section-number">01</span><div><h2>Как развивался матч</h2><p className="lead">{narrative?.explanation || 'Недостаточно данных для связного сценария.'}</p></div></section>
-    <section className="report-section"><span className="section-number">02</span><div className="wide"><h2>Ключевые бои</h2><div className="combat-list">{(analysis.combats || []).length ? analysis.combats.map((combat, index) => <CombatBlock combat={combat} key={`${combat.startedAt}-${index}`} />) : <p className="muted">Не удалось надёжно восстановить отдельные боевые эпизоды.</p>}</div></div></section>
+    <section className="report-section"><span className="section-number">02</span><div className="wide"><h2>История боёв</h2><div className="combat-list">{(analysis.combats || []).length ? analysis.combats.map((combat, index) => <CombatBlock combat={combat} index={index} key={combat.id || `${combat.startedAt}-${index}`} />) : <p className="muted">Не удалось надёжно восстановить отдельные боевые эпизоды.</p>}</div></div></section>
     <section className="report-section"><span className="section-number">03</span><div className="wide"><h2>Переломные моменты</h2><div className="story-list">{events.map((card, index) => <div className="story-row" key={`${card.at}-${index}`}><time>{clock(durationSeconds(card.at))}</time><div><h3>{card.title}</h3><p>{card.explanation}</p><small>Уверенность {Math.round((card.confidence || 0) * 100)}%</small></div></div>)}</div></div></section>
     <section className="report-section"><span className="section-number">04</span><div className="wide"><h2>Что изменить в следующей игре</h2><ol className="next-actions">{(feed.nextGameRecommendations || []).map(item => <li key={item}>{item}</li>)}</ol></div></section>
     <footer className="report-footer panel"><div className="actions"><button onClick={onDownload}>Скачать отчёт</button><button onClick={onTranscript}>Расшифровка для ИИ</button><button onClick={onSupportBundle}>Support bundle</button></div><small>Analysis ID: {analysis.diagnostics?.analysisId || '—'} · {analysis.diagnostics?.applicationVersion || '—'} · {analysis.diagnostics?.totalTimeMs || 0} мс</small></footer>
   </article>;
 }
 
-function CombatBlock({ combat }) {
+function CombatBlock({ combat, index }) {
   return <section className="combat-block">
-    <div className="combat-title"><time>{clock(durationSeconds(combat.startedAt))}</time><div><h3>{combat.initiator || 'Игрок'} атакует {combat.opponent || 'соперника'}</h3><p>{combat.winner ? `Эпизод выиграл ${combat.winner}.` : 'Победитель эпизода не определён.'}{combat.location ? ` Координаты: ${combat.location}.` : ''}</p></div></div>
+    <div className="combat-title"><time>{clock(durationSeconds(combat.startedAt))}</time><div><h3>{combat.ordinalLabel || `Бой ${index + 1}`} · {combat.initiator || 'Игрок'} атакует {combat.opponent || 'соперника'}</h3><p>{clock(durationSeconds(combat.startedAt))}–{clock(durationSeconds(combat.endedAt))}. {combat.location ? `Координаты команды: ${combat.location}.` : ''}</p></div></div>
     <div className="combat-participants">{(combat.participants || []).map(player => <div key={player.player}>
       <h4>{player.player}</h4>
       <dl>
-        <dt>Армия до</dt><dd>{composition(player.armyBefore)}</dd>
+        <dt>Армия в начале</dt><dd>{composition(player.armyBefore)}</dd>
+        <dt>Новые юниты в интервале</dt><dd>{composition(player.additions)}</dd>
         <dt>Грейды</dt><dd>{listText(player.upgrades)}</dd>
         <dt>Технологии</dt><dd>{listText(player.technologies)}</dd>
         <dt>Боевые потери</dt><dd>{composition(player.unitsLost)}</dd>
         <dt>Рабочие</dt><dd>{composition(player.workersLost)}</dd>
         <dt>Здания</dt><dd>{composition(player.structuresLost)}</dd>
         <dt>Оборона</dt><dd>{composition(player.staticDefenseLost)}</dd>
-        <dt>Армия после</dt><dd>{composition(player.armyAfter)}</dd>
+        <dt>Армия в конце</dt><dd>{composition(player.armyAfter)}</dd>
         <dt>Стоимость армии</dt><dd>{Math.round(player.armyValueBefore || 0)} → {Math.round(player.armyValueAfter || 0)}</dd>
+        <dt>Сверка</dt><dd>{reconciliationText(player)}</dd>
       </dl>
     </div>)}</div>
   </section>;
 }
 
-function narrativeText(analysis) { return (analysis.coachFeed?.cards || []).find(card => card.title === 'Как развивался матч')?.explanation || ''; }
-function composition(value) { const entries = Object.entries(value || {}); return entries.length ? entries.map(([unit, count]) => `${count} × ${unit}`).join(', ') : 'нет'; }
-function listText(value) { return (value || []).length ? value.join(', ') : 'нет данных'; }
 function downloadText(text, filename) { downloadBlob(new Blob([text || ''], { type: 'text/markdown;charset=utf-8' }), filename); }
 function downloadBlob(blob, filename) { const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = filename; link.click(); URL.revokeObjectURL(link.href); }
-function durationSeconds(value) { const m = String(value || '').match(/^PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?$/); return m ? Number(m[1] || 0) * 3600 + Number(m[2] || 0) * 60 + Number(m[3] || 0) : Number(value || 0); }
-function clock(value) { const seconds = Math.round(Number(value || 0)); return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`; }
 
 createRoot(document.getElementById('root')).render(<React.StrictMode><App /></React.StrictMode>);
