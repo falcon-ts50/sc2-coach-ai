@@ -246,7 +246,22 @@ A boundary requires at least one material condition:
 
 A single command, isolated death or clock interval is insufficient.
 
-Thresholds must be centralized in a versioned `NarrativeAnalysisConfig` and covered by tests. The implementation agent must document actual defaults and rationale in the change before requesting review.
+Thresholds must be centralized in a versioned `NarrativeAnalysisConfig` and covered by tests.
+
+Implementation defaults for this APPLY pass:
+
+- config version: `narrative-analysis-config.v1`;
+- early phase boundary: first `7:00`;
+- mid-game boundary: first `16:00`;
+- army swing threshold: `300` resource-value points;
+- recovery threshold: first post-decline army recovery of at least `150` resource-value points;
+- economy swing threshold: `350` economy-proxy points;
+- supply swing threshold: `12` supply;
+- overall score swing threshold: `18`;
+- default phase confidence: `0.68`;
+- default causal-link confidence: `0.64`.
+
+These are deliberately configurable heuristics. They are strong enough to find the fixed benchmark trajectory without encoding that replay's exact timestamps, but they are not treated as universal strategic truth.
 
 ## Principal causal chain
 

@@ -113,3 +113,23 @@ For each combat unit type, the report should reconcile:
 `army at start + additions - combat losses = army at end`
 
 When replay lifecycle data cannot support exact reconciliation, the participant must be marked partial/incomplete instead of silently presenting contradictory counts.
+
+## ADR-013 — Release versioning policy
+
+**Status:** Accepted
+
+Semantic version identifies a released product, not an individual feature merge or CI attempt. It uses strict `MAJOR.MINOR.PATCH` format and changes only in a release PR from `develop` to `main`. Every such release must increase the version by at least PATCH; the release author explicitly chooses PATCH, MINOR or MAJOR.
+
+The root `VERSION` file is authoritative. Committed Maven, frontend and container version references must remain synchronized with it and CI rejects drift.
+
+After a successful merge to `main`, the validated commit receives immutable annotated tag `v<version>` before production deployment. Rebuilding the same commit preserves semantic version and Git commit while the independent build number may change.
+
+## ADR-014 — Narrative Analysis is an additive deterministic layer
+
+**Status:** Accepted
+
+Narrative Analysis is introduced as a backend-owned vertical slice that consumes existing domain outputs instead of reimplementing combat detection, turning-point scoring, recommendation rules or scouting detection.
+
+The public report may show a preliminary verdict, phases, a principal chain and a match-overview chart, but the domain contract must preserve source references, confidence and limitations. Temporal order may support cautious links such as `PRECEDED` or `RECOVERED_FROM`; it must not be presented as proof of player intent, visibility, a forced winner, or a strategic result.
+
+Strategic result is explicitly out of scope for this slice and is serialized as `NOT_EVALUATED`.
