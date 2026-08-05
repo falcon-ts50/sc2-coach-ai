@@ -9,10 +9,18 @@ git fetch --prune origin
 git checkout "$BRANCH"
 git pull --ff-only origin "$BRANCH"
 
-export APP_VERSION="${APP_VERSION:-0.8.0}"
+RELEASE_VERSION="$(tr -d '[:space:]' < VERSION)"
+python3 scripts/release_version.py --check-sync >/dev/null
+
+export APP_VERSION="${APP_VERSION:-$RELEASE_VERSION}"
 export BUILD_NUMBER="${BUILD_NUMBER:-$(date -u +%Y%m%d%H%M%S)}"
 export BUILD_TIME="${BUILD_TIME:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}"
 export GIT_COMMIT="${GIT_COMMIT:-$(git rev-parse --short=12 HEAD)}"
+
+if [[ "$APP_VERSION" != "$RELEASE_VERSION" ]]; then
+  printf 'APP_VERSION %s differs from VERSION %s.\n' "$APP_VERSION" "$RELEASE_VERSION" >&2
+  exit 1
+fi
 
 printf 'Building version %s, build %s, commit %s...\n' "$APP_VERSION" "$BUILD_NUMBER" "$GIT_COMMIT"
 docker compose build --pull
