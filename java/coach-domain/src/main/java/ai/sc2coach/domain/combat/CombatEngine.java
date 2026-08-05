@@ -10,7 +10,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.stream.Collectors;
 
 public final class CombatEngine {
@@ -29,6 +28,7 @@ public final class CombatEngine {
         return attacks.stream()
                 .map(event -> buildCombat(analysis, event))
                 .filter(combat -> combat.participants().size() >= 2)
+                .filter(this::hasObservedCombatLoss)
                 .filter(combat -> focusPlayer == null || focusPlayer.isBlank()
                         || combat.participants().stream().anyMatch(p -> p.player().equalsIgnoreCase(focusPlayer)))
                 .limit(8)
@@ -44,6 +44,7 @@ public final class CombatEngine {
         var deaths = analysis.timeline().stream()
                 .filter(this::isDeath)
                 .filter(event -> value(event.time()) >= start && value(event.time()) <= end)
+                .filter(event -> isCombatUnit(deathUnitName(analysis, event)))
                 .toList();
 
         var participantNames = new ArrayList<String>();
@@ -60,7 +61,7 @@ public final class CombatEngine {
                 .filter(player -> !player.equalsIgnoreCase(initiator))
                 .findFirst().orElse(null);
         String winner = participants.stream()
-                .min(Comparator.comparingInt(p -> p.unitsLost().values().stream().mapToInt(Integer::intValue).sum()))
+                .min(Comparator.comparingDouble(this::observedLossScore))
                 .map(Combat.Participant::player).orElse(null);
 
         return new Combat(
@@ -71,7 +72,7 @@ public final class CombatEngine {
                 winner,
                 participants,
                 location(attack),
-                deaths.isEmpty() ? 0.55 : 0.82
+                deaths.isEmpty() ? 0.45 : 0.82
         );
     }
 
@@ -86,8 +87,8 @@ public final class CombatEngine {
         var after = armyAt(analysis, player, end);
         var lost = deaths.stream()
                 .filter(event -> player.equalsIgnoreCase(playerName(analysis, event.player())))
-                .map(event -> Optional.ofNullable(event.victim()).orElse(event.unit()))
-                .filter(Objects::nonNull)
+                .map(event -> deathUnitName(analysis, event))
+                .filter(this::isCombatUnit)
                 .collect(Collectors.groupingBy(name -> name, LinkedHashMap::new, Collectors.summingInt(ignored -> 1)));
 
         return new Combat.Participant(
@@ -106,8 +107,8 @@ public final class CombatEngine {
                 .filter(event -> value(event.time()) <= at)
                 .filter(event -> player.equalsIgnoreCase(playerName(analysis, event.player())))
                 .forEach(event -> {
-                    String unit = event.unit() != null ? event.unit() : event.victim();
-                    if (unit == null || isWorkerOrStructure(unit)) return;
+                    String unit = lifecycleUnitName(analysis, event);
+                    if (!isCombatUnit(unit)) return;
                     if (isBirth(event)) counts.merge(unit, 1, Integer::sum);
                     if (isDeath(event)) counts.computeIfPresent(unit, (ignored, count) -> Math.max(0, count - 1));
                 });
@@ -141,15 +142,72 @@ public final class CombatEngine {
     }
 
     private boolean isDeath(ReplayAnalysis.TimelineEvent event) {
-        return lower(event.event()).contains("died") || event.victim() != null;
+        return lower(event.event()).contains("died");
     }
 
-    private boolean isWorkerOrStructure(String unit) {
+    private String lifecycleUnitName(ReplayAnalysis analysis, ReplayAnalysis.TimelineEvent event) {
+        if (isDeath(event)) return deathUnitName(analysis, event);
+        return event.unit();
+    }
+
+    private String deathUnitName(ReplayAnalysis analysis, ReplayAnalysis.TimelineEvent event) {
+        if (event.unit() != null && !event.unit().isBlank()) return event.unit();
+        if (event.victim() == null || event.victim().isBlank()) return null;
+        return isKnownPlayerName(analysis, event.victim()) ? null : event.victim();
+    }
+
+    private boolean isKnownPlayerName(ReplayAnalysis analysis, String value) {
+        return analysis.players().stream().anyMatch(player -> player.name().equalsIgnoreCase(value));
+    }
+
+    private boolean isCombatUnit(String unit) {
+        if (unit == null || unit.isBlank()) return false;
         String value = lower(unit);
-        return value.contains("scv") || value.contains("probe") || value.contains("drone")
-                || value.contains("commandcenter") || value.contains("nexus") || value.contains("hatchery")
-                || value.contains("barracks") || value.contains("factory") || value.contains("starport")
-                || value.contains("gateway") || value.contains("pylon") || value.contains("depot");
+        return !value.startsWith("beacon")
+                && !value.contains("mineralfield")
+                && !value.contains("vespeneg")
+                && !value.contains("destructible")
+                && !value.contains("watchtower")
+                && !value.contains("xelnaga")
+                && !value.contains("larva")
+                && !value.contains("egg")
+                && !value.contains("mule")
+                && !value.contains("scv")
+                && !value.contains("probe")
+                && !value.contains("drone")
+                && !value.contains("commandcenter")
+                && !value.contains("orbitalcommand")
+                && !value.contains("planetaryfortress")
+                && !value.contains("nexus")
+                && !value.contains("hatchery")
+                && !value.contains("lair")
+                && !value.contains("hive")
+                && !value.contains("barracks")
+                && !value.contains("factory")
+                && !value.contains("starport")
+                && !value.contains("gateway")
+                && !value.contains("warpgate")
+                && !value.contains("pylon")
+                && !value.contains("supplydepot")
+                && !value.contains("refinery")
+                && !value.contains("assimilator")
+                && !value.contains("extractor")
+                && !value.contains("engineeringbay")
+                && !value.contains("armory")
+                && !value.contains("missileturret")
+                && !value.contains("photoncannon")
+                && !value.contains("spinecrawler")
+                && !value.contains("sporecrawler");
+    }
+
+    private boolean hasObservedCombatLoss(Combat combat) {
+        return combat.participants().stream().anyMatch(participant -> !participant.unitsLost().isEmpty());
+    }
+
+    private double observedLossScore(Combat.Participant participant) {
+        double resourceLoss = Math.max(0, participant.armyValueBefore() - participant.armyValueAfter());
+        int observedDeaths = participant.unitsLost().values().stream().mapToInt(Integer::intValue).sum();
+        return resourceLoss + observedDeaths * 25.0;
     }
 
     private String playerName(ReplayAnalysis analysis, Object player) {
