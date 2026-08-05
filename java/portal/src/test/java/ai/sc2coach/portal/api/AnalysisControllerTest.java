@@ -1,6 +1,7 @@
 package ai.sc2coach.portal.api;
 
 import ai.sc2coach.domain.coach.CoachFeed;
+import ai.sc2coach.domain.combat.Combat;
 import ai.sc2coach.domain.context.MatchContext;
 import ai.sc2coach.domain.context.TurningPoint;
 import ai.sc2coach.portal.analysis.AnalysisResponse;
@@ -55,10 +56,30 @@ class AnalysisControllerTest {
                 "analysis-123", "0.7.0", "abcdef1", Instant.parse("2026-08-05T11:00:00Z"),
                 183_431, 750, 120, 870
         );
+        var combat = new Combat(
+                Duration.ofSeconds(95), Duration.ofSeconds(145), "Alpha", "Beta", null,
+                List.of(new Combat.Participant(
+                        "Alpha",
+                        Map.of("Marine", 2),
+                        Map.of("Marine", 3),
+                        Map.of("Marine", 4),
+                        Map.of("Marine", 1),
+                        Map.of(),
+                        Map.of(),
+                        Map.of(),
+                        List.of(),
+                        List.of(),
+                        100,
+                        200,
+                        Combat.ReconciliationStatus.EXACT,
+                        List.of()
+                )),
+                "42.0, 42.0", 0.86, "combat-01-095-145-alpha", "Бой 1"
+        );
         given(analysisService.analyze(any(), nullable(String.class))).willReturn(new AnalysisResponse(
-                "0.2.0", "Test Map", 120.0,
+                "0.2.0", "Test Map", 120.0, "Alpha",
                 List.of(new AnalysisResponse.PlayerSummary(1, "Alpha", "Terran", 1, "Win", 3500, 100.0)),
-                comparison, new MatchContext(List.of(), summary), List.of(point), feed,
+                comparison, new MatchContext(List.of(), summary), List.of(point), List.of(combat), feed,
                 "# Transcript\n\n- `01:30` **Alpha** — command: Attack",
                 diagnostics
         ));
@@ -70,6 +91,10 @@ class AnalysisControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.matchContext.summary.finalLeaderName").value("Alpha"))
                 .andExpect(jsonPath("$.turningPoints[0].newLeaderName").value("Alpha"))
+                .andExpect(jsonPath("$.combats[0].id").value("combat-01-095-145-alpha"))
+                .andExpect(jsonPath("$.combats[0].ordinalLabel").value("Бой 1"))
+                .andExpect(jsonPath("$.combats[0].participants[0].additions.Marine").value(3))
+                .andExpect(jsonPath("$.combats[0].participants[0].reconciliationStatus").value("EXACT"))
                 .andExpect(jsonPath("$.coachFeed.cards[0].title").value("Перелом"))
                 .andExpect(jsonPath("$.transcriptMarkdown").value(org.hamcrest.Matchers.containsString("Attack")))
                 .andExpect(jsonPath("$.diagnostics.analysisId").value("analysis-123"))

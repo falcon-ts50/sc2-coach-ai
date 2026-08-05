@@ -30,6 +30,7 @@ SC2Replay
 - Combat Engine V2 domain contracts.
 - Combat-unit composition before and after detected fights.
 - Separate worker, infrastructure and static-defence losses.
+- Chronological combat history in the REST contract, browser report, Markdown export and support bundle, including per-participant additions during the engagement interval and explicit reconciliation status.
 - Combat upgrades and relevant technologies in army snapshots.
 - Canonical English display names for SC2 upgrades.
 - Filtering of replay noise, cosmetics, beacons, larva and map objects.
@@ -46,6 +47,7 @@ SC2Replay
 - Combat Detector V3 clustering contracts exist, but are not wired into the production report flow yet.
 - Information Engine V1 is independent from combat analysis and is not wired into the public report yet.
 - Army reconstruction is lifecycle-event based and can be incomplete when replay events omit ownership or transformations.
+- Combat additions mean units that became available during the engagement interval; the report does not claim those units physically joined the local fight unless future spatial evidence supports that.
 - Combat outcome is heuristic, not a full simulation of tactical value.
 - Unit display-name normalization is incomplete compared with the full Blizzard localization catalog.
 - Narrative quality depends on confidence of combat reconstruction and macro metrics.
