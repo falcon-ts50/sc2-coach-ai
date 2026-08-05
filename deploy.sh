@@ -9,7 +9,7 @@ git fetch --prune origin
 git checkout "$BRANCH"
 git pull --ff-only origin "$BRANCH"
 
-export APP_VERSION="${APP_VERSION:-0.7.0}"
+export APP_VERSION="${APP_VERSION:-0.8.0}"
 export BUILD_NUMBER="${BUILD_NUMBER:-$(date -u +%Y%m%d%H%M%S)}"
 export BUILD_TIME="${BUILD_TIME:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}"
 export GIT_COMMIT="${GIT_COMMIT:-$(git rev-parse --short=12 HEAD)}"

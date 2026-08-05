@@ -44,7 +44,7 @@ import java.util.stream.Stream;
 @RequiredArgsConstructor
 public final class AnalysisService {
 
-    private static final String APPLICATION_VERSION = System.getenv().getOrDefault("APP_VERSION", "0.7.0-SNAPSHOT");
+    private static final String APPLICATION_VERSION = System.getenv().getOrDefault("APP_VERSION", "0.8.0-SNAPSHOT");
     private static final String GIT_COMMIT = System.getenv().getOrDefault("GIT_COMMIT", "unknown");
 
     private final ReplayDecoder replayDecoder;
