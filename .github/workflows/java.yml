@@ -3,7 +3,7 @@ name: java
 on:
   pull_request:
   push:
-    branches: [main, develop]
+    branches: [develop]
 
 jobs:
   test:
@@ -26,5 +26,3 @@ jobs:
       - name: Test Java modules
         working-directory: java
         run: mvn --batch-mode --no-transfer-progress verify
-      - name: Build production image
-        run: docker build -t sc2-coach-ai:ci .

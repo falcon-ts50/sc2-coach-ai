@@ -45,9 +45,9 @@ Implementation is allowed only when the change artifacts are internally consiste
 
 ### VERIFY
 
-Review the implementation against every requirement and scenario, ensure appropriate automated tests are present, and document deviations. GitHub Actions is the authority for executing test suites, Maven/frontend builds and Docker image builds.
+Compare implementation with every requirement and scenario and document deviations. Do not hide failing or unavailable checks.
 
-Do not run local full test suites, Maven verification, frontend production builds or Docker image builds unless the user explicitly requests a local run. Do not duplicate checks already performed by GitHub Actions.
+Repository-wide test suites, Maven/frontend builds and Docker image builds are executed by GitHub Actions. Agents SHALL NOT run local full suites or full builds unless the user explicitly requests a local run. Agents may add or update focused tests as part of implementation, but CI is the authoritative executor.
 
 ### ARCHIVE
 
@@ -64,7 +64,7 @@ Do not:
 - invent product requirements;
 - silently change module boundaries;
 - expand scope because an adjacent refactor looks attractive;
-- mark tasks complete without corresponding code and CI validation;
+- mark tasks complete without corresponding code and CI evidence;
 - rewrite established decisions without proposing a new ADR;
 - continue when the repository and task packet materially contradict each other.
 
@@ -74,11 +74,11 @@ When ambiguity blocks safe work, record it under `Open questions` in the change 
 
 `tasks.md` is an auditable execution record.
 
-- Mark an implementation task complete after its code and automated test coverage are present.
-- Treat GitHub Actions results as validation evidence.
-- Add concise evidence beneath completed tasks: files, tests added and CI checks.
+- Mark a task complete only after its acceptance condition is met.
+- Add concise evidence beneath completed tasks: files, focused tests added, or GitHub Actions results.
 - Record deviations explicitly.
 - Never delete incomplete tasks to make the checklist appear complete.
+- Do not add local full-build evidence unless the user explicitly requested that run.
 
 ## Pull requests
 
@@ -87,6 +87,8 @@ Every implementation PR must:
 - target `develop` unless explicitly authorized otherwise;
 - reference the active change path;
 - summarize requirements implemented;
-- list automated tests added or updated and defer their execution status to GitHub Actions;
+- list tests added or updated and report GitHub Actions status;
 - disclose deviations and known limitations;
 - include specification/task updates in the same PR when applicable.
+
+Do not delay a PR to duplicate GitHub Actions locally. Open the PR after implementation and let repository CI perform the authoritative full validation.
