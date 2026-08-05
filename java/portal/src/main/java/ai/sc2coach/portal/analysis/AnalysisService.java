@@ -22,6 +22,7 @@ import ai.sc2coach.domain.knowledge.Recommendation;
 import ai.sc2coach.domain.model.Match;
 import ai.sc2coach.domain.model.ReplayDomainMapper;
 import ai.sc2coach.domain.narrative.CoachNarrativeEngine;
+import ai.sc2coach.domain.narrative.CombatNarrativeEngine;
 import ai.sc2coach.domain.narrative.MatchNarrative;
 import ai.sc2coach.domain.narrative.NarrativeEngine;
 import lombok.RequiredArgsConstructor;
@@ -58,6 +59,7 @@ public final class AnalysisService {
     private final ArgumentDeltaEngine argumentDeltaEngine;
     private final NarrativeEngine narrativeEngine;
     private final CoachNarrativeEngine coachNarrativeEngine;
+    private final CombatNarrativeEngine combatNarrativeEngine;
     private final CombatEngine combatEngine;
     private final ReplayUploadValidator uploadValidator;
 
@@ -70,7 +72,6 @@ public final class AnalysisService {
         long startedAt = System.nanoTime();
         String filename = uploadValidator.validateMetadata(replay);
         long replaySize = replay.getSize();
-
         log.info("analysis_started id={} replaySizeBytes={} focusPlayer={}", analysisId, replaySize, requestedFocusPlayer);
 
         try (TemporaryWorkspace workspace = TemporaryWorkspace.create()) {
@@ -95,20 +96,25 @@ public final class AnalysisService {
                     new KnowledgeContext(match, matchContext, turningPoints, decisions)
             );
             CoachFeed feed = coachFeedEngine.build(match, matchContext, turningPoints, decisions, recommendations);
+            List<Combat> combats = combatEngine.detect(analysis, focusPlayer);
 
             List<Episode> episodes = episodeEngine.build(turningPoints, decisions);
             List<ArgumentDelta> deltas = argumentDeltaEngine.calculate(matchContext);
             MatchNarrative narrative = narrativeEngine.build(episodes, deltas, matchContext.summary().finalLeaderName());
-            String narrativeText = coachNarrativeEngine.render(narrative);
+            String fallbackNarrative = coachNarrativeEngine.render(narrative);
+            String narrativeText = combatNarrativeEngine.render(focusPlayer, combats, fallbackNarrative);
             CoachFeed.Card narrativeCard = new CoachFeed.Card(
                     Duration.ZERO, CoachFeed.Kind.INFO, CoachFeed.Impact.HIGH,
-                    "Как развивался матч", narrativeText, 0.8
+                    "Как развивался матч", narrativeText, combats.isEmpty() ? 0.65 : 0.84
             );
             List<CoachFeed.Card> cards = Stream.concat(Stream.of(narrativeCard), feed.cards().stream())
                     .limit(6)
                     .toList();
-            CoachFeed coachFeed = new CoachFeed(feed.headline(), cards, feed.nextGameRecommendations());
-            List<Combat> combats = combatEngine.detect(analysis, focusPlayer);
+            CoachFeed coachFeed = new CoachFeed(
+                    "Разбор матча для " + focusPlayer + ". " + feed.headline(),
+                    cards,
+                    feed.nextGameRecommendations()
+            );
 
             long analysisTimeMs = elapsedMillis(analysisStartedAt);
             long totalTimeMs = elapsedMillis(startedAt);
@@ -116,7 +122,6 @@ public final class AnalysisService {
                     analysisId, APPLICATION_VERSION, GIT_COMMIT, Instant.now(), replaySize,
                     decodeTimeMs, analysisTimeMs, totalTimeMs
             );
-
             log.info("analysis_completed id={} focusPlayer={} combats={} totalTimeMs={}",
                     analysisId, focusPlayer, combats.size(), totalTimeMs);
 
