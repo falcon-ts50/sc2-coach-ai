@@ -3,37 +3,43 @@ package ai.sc2coach.domain.narrative;
 import ai.sc2coach.domain.delta.ArgumentDelta;
 import ai.sc2coach.domain.episode.Episode;
 
-import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Optional;
+import java.util.stream.Stream;
 
 public final class NarrativeEngine {
 
     public MatchNarrative build(List<Episode> episodes, List<ArgumentDelta> deltas, String finalLeader) {
-        var beats = new ArrayList<MatchNarrative.Beat>();
-        if (episodes != null) {
-            for (Episode episode : episodes) {
-                var nearby = nearbyDeltas(episode, deltas);
-                beats.add(new MatchNarrative.Beat(
-                        episode.from(),
-                        kind(episode, nearby),
-                        episode.title(),
-                        statement(episode, nearby),
-                        evidence(episode, nearby)
-                ));
-            }
-        }
-        beats.sort(Comparator.comparing(MatchNarrative.Beat::at));
+        List<MatchNarrative.Beat> beats = Optional.ofNullable(episodes)
+                .orElseGet(List::of)
+                .stream()
+                .map(episode -> toBeat(episode, nearbyDeltas(episode, deltas)))
+                .sorted(Comparator.comparing(MatchNarrative.Beat::at))
+                .toList();
+
         String summary = beats.isEmpty()
                 ? "Недостаточно данных, чтобы построить историю матча."
                 : "Матч разбит на " + beats.size() + " значимых эпизодов. В финальном измеренном состоянии лидировал "
-                + (finalLeader == null ? "неопределённый игрок" : finalLeader) + ".";
+                + Optional.ofNullable(finalLeader).orElse("неопределённый игрок") + ".";
+
         return new MatchNarrative(summary, beats);
     }
 
+    private MatchNarrative.Beat toBeat(Episode episode, List<ArgumentDelta> nearby) {
+        return new MatchNarrative.Beat(
+                episode.from(),
+                kind(episode, nearby),
+                episode.title(),
+                statement(episode, nearby),
+                evidence(episode, nearby)
+        );
+    }
+
     private List<ArgumentDelta> nearbyDeltas(Episode episode, List<ArgumentDelta> deltas) {
-        if (deltas == null) return List.of();
-        return deltas.stream()
+        return Optional.ofNullable(deltas)
+                .orElseGet(List::of)
+                .stream()
                 .filter(delta -> delta.to().compareTo(episode.from()) >= 0
                         && delta.from().compareTo(episode.to()) <= 0)
                 .sorted(Comparator.comparingInt((ArgumentDelta delta) -> weight(delta.significance())).reversed())
@@ -56,22 +62,24 @@ public final class NarrativeEngine {
     }
 
     private String statement(Episode episode, List<ArgumentDelta> deltas) {
-        var critical = deltas.stream().filter(delta -> delta.significance() == ArgumentDelta.Significance.CRITICAL)
-                .findFirst();
-        if (critical.isPresent()) {
-            var delta = critical.get();
-            return episode.title() + ": показатель «" + component(delta.component()) + "» игрока "
-                    + delta.playerName() + " изменился на " + percent(delta.relativeChangePercent()) + ".";
-        }
-        return episode.title() + ". Эпизод требует проверки по таймлайну и доступным доказательствам.";
+        return deltas.stream()
+                .filter(delta -> delta.significance() == ArgumentDelta.Significance.CRITICAL)
+                .findFirst()
+                .map(delta -> episode.title() + ": показатель «" + component(delta.component()) + "» игрока "
+                        + delta.playerName() + " изменился на " + percent(delta.relativeChangePercent()) + ".")
+                .orElseGet(() -> episode.title()
+                        + ". Эпизод требует проверки по таймлайну и доступным доказательствам.");
     }
 
     private List<String> evidence(Episode episode, List<ArgumentDelta> deltas) {
-        var result = new ArrayList<String>();
-        result.addAll(episode.evidence());
-        deltas.forEach(delta -> result.add(delta.playerName() + ": " + component(delta.component())
-                + " " + percent(delta.relativeChangePercent())));
-        return result.stream().distinct().limit(5).toList();
+        Stream<String> episodeEvidence = episode.evidence().stream();
+        Stream<String> deltaEvidence = deltas.stream()
+                .map(delta -> delta.playerName() + ": " + component(delta.component())
+                        + " " + percent(delta.relativeChangePercent()));
+        return Stream.concat(episodeEvidence, deltaEvidence)
+                .distinct()
+                .limit(5)
+                .toList();
     }
 
     private int weight(ArgumentDelta.Significance significance) {
