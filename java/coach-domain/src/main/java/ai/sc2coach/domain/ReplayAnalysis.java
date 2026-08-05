@@ -13,7 +13,8 @@ public record ReplayAnalysis(
         Replay replay,
         @JsonProperty("focus_player") String focusPlayer,
         List<Player> players,
-        List<TimelineEvent> timeline
+        List<TimelineEvent> timeline,
+        @JsonProperty("transcript_markdown") String transcriptMarkdown
 ) {
     public ReplayAnalysis {
         players = players == null ? List.of() : List.copyOf(players);
@@ -76,6 +77,14 @@ public record ReplayAnalysis(
             String unit,
             String upgrade,
             String victim,
+            String killer,
+            String ability,
+            @JsonProperty("target_unit") String targetUnit,
+            Position position,
+            @JsonProperty("target_position") Position targetPosition,
             Map<String, Object> attributes
     ) {}
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record Position(Double x, Double y) {}
 }
