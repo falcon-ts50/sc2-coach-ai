@@ -5,6 +5,7 @@ import ai.sc2coach.domain.coach.CoachFeed;
 import ai.sc2coach.domain.combat.Combat;
 import ai.sc2coach.domain.context.MatchContext;
 import ai.sc2coach.domain.context.TurningPoint;
+import ai.sc2coach.domain.narrative.analysis.NarrativeAnalysis;
 
 import java.time.Instant;
 import java.util.List;
@@ -19,6 +20,7 @@ public record AnalysisResponse(
         MatchContext matchContext,
         List<TurningPoint> turningPoints,
         List<Combat> combats,
+        NarrativeAnalysis narrativeAnalysis,
         CoachFeed coachFeed,
         String transcriptMarkdown,
         Diagnostics diagnostics
@@ -42,7 +44,25 @@ public record AnalysisResponse(
             Diagnostics diagnostics
     ) {
         this(schemaVersion, map, gameSeconds, null, players, comparison, matchContext,
-                turningPoints, List.of(), coachFeed, transcriptMarkdown, diagnostics);
+                turningPoints, List.of(), null, coachFeed, transcriptMarkdown, diagnostics);
+    }
+
+    public AnalysisResponse(
+            String schemaVersion,
+            String map,
+            Double gameSeconds,
+            String focusPlayer,
+            List<PlayerSummary> players,
+            MatchComparison.Result comparison,
+            MatchContext matchContext,
+            List<TurningPoint> turningPoints,
+            List<Combat> combats,
+            CoachFeed coachFeed,
+            String transcriptMarkdown,
+            Diagnostics diagnostics
+    ) {
+        this(schemaVersion, map, gameSeconds, focusPlayer, players, comparison, matchContext,
+                turningPoints, combats, null, coachFeed, transcriptMarkdown, diagnostics);
     }
 
     public static AnalysisResponse from(
@@ -51,6 +71,7 @@ public record AnalysisResponse(
             MatchContext matchContext,
             List<TurningPoint> turningPoints,
             List<Combat> combats,
+            NarrativeAnalysis narrativeAnalysis,
             CoachFeed coachFeed,
             Diagnostics diagnostics
     ) {
@@ -64,6 +85,7 @@ public record AnalysisResponse(
                 matchContext,
                 turningPoints,
                 combats,
+                narrativeAnalysis,
                 coachFeed,
                 analysis.transcriptMarkdown(),
                 diagnostics

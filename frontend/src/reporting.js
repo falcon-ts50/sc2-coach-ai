@@ -6,6 +6,7 @@ export function buildMarkdown(analysis) {
     `**Карта:** ${analysis.map || '—'}`,
     `**Длительность:** ${clock(analysis.gameSeconds)}`, '',
     '## Итог', '', analysis.coachFeed?.headline || 'Недостаточно данных.', '',
+    ...narrativeAnalysisMarkdown(analysis),
     '## Как развивался матч', '', narrativeText(analysis), '',
     '## История боёв', ''
   ];
@@ -32,6 +33,40 @@ export function buildMarkdown(analysis) {
   lines.push('## Что сделать в следующей игре', '');
   (analysis.coachFeed?.nextGameRecommendations || []).forEach((item, index) => lines.push(`${index + 1}. ${item}`));
   return lines.join('\n');
+}
+
+export function narrativeAnalysisMarkdown(analysis) {
+  const narrative = analysis?.narrativeAnalysis;
+  if (!narrative) return [];
+  const lines = [
+    '## Narrative Analysis', '',
+    `- Официальный результат реплея: ${narrative.officialReplayResult || '—'}`,
+    `- Статус анализа: ${narrative.status || '—'}`,
+    `- Strategic result: ${narrative.strategicResultStatus || 'NOT_EVALUATED'}`,
+    `- Команда фокуса: ${(narrative.focusTeamPlayers || []).join(', ') || '—'}`, '',
+    narrative.summary?.verdict || 'Недостаточно данных для связного сценария.', '',
+    '### Фазы', ''
+  ];
+  (narrative.timeline?.phases || []).forEach(phase => {
+    lines.push(`- ${clock(durationSeconds(phase.startedAt))}–${clock(durationSeconds(phase.endedAt))}: ${phase.title}. ${phase.summary}`);
+  });
+  lines.push('', '### Сценарная цепочка', '');
+  (narrative.timeline?.causalLinks || []).forEach(link => {
+    lines.push(`- ${link.kind}: ${link.statement}`);
+  });
+  lines.push('', '### Данные графика', '');
+  (narrative.chart?.series || []).forEach(series => {
+    const points = series.points || [];
+    const first = points[0];
+    const last = points[points.length - 1];
+    lines.push(`- ${series.label}: ${series.completeness || '—'}, ${points.length} точек${first && last ? `, ${clock(durationSeconds(first.at))}=${Math.round(first.value)}, ${clock(durationSeconds(last.at))}=${Math.round(last.value)}` : ''}`);
+  });
+  if ((narrative.limitations || []).length) {
+    lines.push('', '### Ограничения', '');
+    narrative.limitations.forEach(item => lines.push(`- ${item}`));
+  }
+  lines.push('');
+  return lines;
 }
 
 export function narrativeText(analysis) {

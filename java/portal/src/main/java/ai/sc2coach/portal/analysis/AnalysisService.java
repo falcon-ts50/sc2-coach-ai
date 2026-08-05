@@ -25,6 +25,9 @@ import ai.sc2coach.domain.narrative.CoachNarrativeEngine;
 import ai.sc2coach.domain.narrative.CombatNarrativeEngine;
 import ai.sc2coach.domain.narrative.MatchNarrative;
 import ai.sc2coach.domain.narrative.NarrativeEngine;
+import ai.sc2coach.domain.narrative.analysis.NarrativeAnalysis;
+import ai.sc2coach.domain.narrative.analysis.NarrativeAnalysisEngine;
+import ai.sc2coach.domain.narrative.analysis.NarrativeAnalysisInput;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -46,6 +49,7 @@ public final class AnalysisService {
 
     private static final String APPLICATION_VERSION = System.getenv().getOrDefault("APP_VERSION", "0.8.0-SNAPSHOT");
     private static final String GIT_COMMIT = System.getenv().getOrDefault("GIT_COMMIT", "unknown");
+    private static final NarrativeAnalysisEngine NARRATIVE_ANALYSIS_ENGINE = new NarrativeAnalysisEngine();
 
     private final ReplayDecoder replayDecoder;
     private final ReplayAnalysisReader reader;
@@ -97,6 +101,9 @@ public final class AnalysisService {
             );
             CoachFeed feed = coachFeedEngine.build(match, matchContext, turningPoints, decisions, recommendations);
             List<Combat> combats = combatEngine.detect(analysis, focusPlayer);
+            NarrativeAnalysis narrativeAnalysis = NARRATIVE_ANALYSIS_ENGINE.analyze(new NarrativeAnalysisInput(
+                    match, focusPlayer, matchContext, turningPoints, decisions, combats, null, recommendations
+            ));
 
             List<Episode> episodes = episodeEngine.build(turningPoints, decisions);
             List<ArgumentDelta> deltas = argumentDeltaEngine.calculate(matchContext);
@@ -126,7 +133,7 @@ public final class AnalysisService {
                     analysisId, focusPlayer, combats.size(), totalTimeMs);
 
             return AnalysisResponse.from(
-                    analysis, focusPlayer, matchContext, turningPoints, combats, coachFeed, diagnostics
+                    analysis, focusPlayer, matchContext, turningPoints, combats, narrativeAnalysis, coachFeed, diagnostics
             );
         } catch (IOException exception) {
             log.error("analysis_failed id={} reason=io", analysisId, exception);
