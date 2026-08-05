@@ -100,8 +100,8 @@ Acceptance: the fixed replay can be read as a coherent sequence of fights on an 
   - Evidence: `docs/DECISIONS.md` ADR-012 records addition/reconciliation semantics.
 - [x] 6.3 Update this task file with actual observed values from the fixed replay under the tester section below.
   - Evidence: tester handoff below.
-- [ ] 6.4 Open a PR to `develop` and include the fixed-replay verification evidence.
-  - Pending final commit and PR creation.
+- [x] 6.4 Open a PR to `develop` and include the fixed-replay verification evidence.
+  - Evidence: PR #73 `https://github.com/falcon-ts50/sc2-coach-ai/pull/73` targets `develop` directly and includes the fixed replay/support-bundle verification notes.
 
 ---
 
