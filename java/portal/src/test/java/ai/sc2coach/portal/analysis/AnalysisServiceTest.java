@@ -11,6 +11,7 @@ import ai.sc2coach.domain.episode.EpisodeEngine;
 import ai.sc2coach.domain.knowledge.KnowledgeEngine;
 import ai.sc2coach.domain.model.ReplayDomainMapper;
 import ai.sc2coach.domain.narrative.CoachNarrativeEngine;
+import ai.sc2coach.domain.narrative.CombatNarrativeEngine;
 import ai.sc2coach.domain.narrative.NarrativeEngine;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockMultipartFile;
@@ -82,6 +83,7 @@ class AnalysisServiceTest {
                 new ArgumentDeltaEngine(),
                 new NarrativeEngine(),
                 new CoachNarrativeEngine(),
+                new CombatNarrativeEngine(),
                 new CombatEngine(),
                 new ReplayUploadValidator()
         );
