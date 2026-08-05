@@ -3,7 +3,7 @@ services:
     build:
       context: .
       args:
-        APP_VERSION: "${APP_VERSION:-0.8.2-SNAPSHOT}"
+        APP_VERSION: "${APP_VERSION:-0.8.3-SNAPSHOT}"
         BUILD_NUMBER: "${BUILD_NUMBER:-local}"
         BUILD_TIME: "${BUILD_TIME:-unknown}"
         GIT_COMMIT: "${GIT_COMMIT:-unknown}"
