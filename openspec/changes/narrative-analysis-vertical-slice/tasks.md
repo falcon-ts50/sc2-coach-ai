@@ -62,7 +62,7 @@ Lifecycle gate for implementation: `APPLY`
 - [ ] Overlay combat markers, turning points and phase intervals/boundaries.
 - [ ] Synchronize phase selection with the chart interval.
 - [ ] Keep frontend logic presentational; do not infer phases or causality in React.
-- [ ] Validate desktop and mobile layouts.
+- [ ] Cover the narrative layout and interactions with automated frontend tests where the current frontend test stack supports them.
 
 ## 8. Markdown parity
 
@@ -70,13 +70,12 @@ Lifecycle gate for implementation: `APPLY`
 - [ ] Include phase ranges and the key before/after values that substitute for interactive chart inspection.
 - [ ] Include evidence, confidence, limitations and `strategic result: not evaluated`.
 
-## 9. Fixed-bundle validation
+## 9. Fixed-bundle regression coverage
 
 - [ ] Use the project's existing benchmark support bundle only.
-- [ ] Fill the actual build identity, analysis ID and exact replay-derived phase/series values below before review.
-- [ ] Capture screenshots for desktop and mobile.
-- [ ] Export and inspect Markdown and support-bundle JSON.
-- [ ] Record every deviation instead of rewriting acceptance criteria.
+- [ ] Add deterministic fixture or integration assertions for the expected semantics below.
+- [ ] Assert the structured narrative payload, chart series, phases, causal links and Markdown output without requiring a separate browser session.
+- [ ] Record material deviations in the implementation PR; do not weaken the expected semantics to match implementation output.
 
 ## 10. General validation
 
@@ -89,13 +88,13 @@ Lifecycle gate for implementation: `APPLY`
 
 ## Expected result on the website
 
-The tester agent SHALL use the same fixed benchmark support bundle already used by the project. Another replay is not an acceptable substitute.
+The implementation SHALL use the same fixed benchmark support bundle already used by the project. Another replay is not an acceptable substitute for regression coverage.
 
-Before requesting verification, the implementation agent must replace all `ACTUAL:` placeholders below with replay-derived values and evidence references. Expected semantics must not be weakened to match implementation output.
+The criteria below define required product behaviour. They SHALL be verified through automated tests and generated artifacts wherever practical; this change does not require a separate manual browser-verification stage or a separate tester agent.
 
 ### 1. Report placement and structure
 
-The browser report shows, near the top and before the existing detailed cards:
+The report presents, near the top and before the existing detailed cards:
 
 1. official replay result and Narrative Analysis status;
 2. a preliminary narrative verdict;
@@ -108,9 +107,9 @@ Acceptance fails if the feature appears only as additional independent cards wit
 
 ### 2. Result semantics
 
-For dragonDriver, the website continues to show the official replay result as a win.
+For dragonDriver, the report continues to show the official replay result as a win.
 
-The website also shows:
+The report also shows:
 
 - `Strategic result: Not evaluated` or an equivalent explicit status;
 - no claim that the official win proves a favourable strategic end state;
@@ -128,16 +127,11 @@ The timeline identifies evidence-supported phases approximately equivalent to:
 - deterioration after the recovered period;
 - late severe decline.
 
-Exact labels and boundaries may differ, but the ordering and state changes must be recognizable and evidence-backed.
-
-Implementation handoff:
-
-- `ACTUAL: phase IDs, labels and time ranges`
-- `ACTUAL: boundary reason and evidence reference for each phase`
+Exact labels and boundaries may differ, but the ordering and state changes must be recognizable, deterministic and evidence-backed.
 
 ### 4. Match-overview graph
 
-A readable time-series graph is visible without opening a secondary diagnostics view.
+A readable time-series graph is present in the primary report.
 
 Default visible series:
 
@@ -151,18 +145,15 @@ Required overlays:
 - narrative phase intervals or boundaries;
 - turning-point markers where the source output provides them.
 
-Bases and production structures are available as optional series if sufficiently complete; incomplete series are labelled as such and are not silently interpolated.
+Bases and production structures are available as optional series if sufficiently complete. Incomplete series are labelled as such and are not silently interpolated.
 
-Implementation handoff:
-
-- `ACTUAL: series names, units, sample interval and completeness`
-- `ACTUAL: notable values around each accepted phase boundary`
+The structured chart payload exposes series names, units, sample interval, completeness and notable values around accepted phase boundaries so these properties can be asserted without visual inspection.
 
 ### 5. Graph and narrative synchronization
 
-Selecting or expanding a phase highlights the corresponding graph interval. A user can visually compare the phase claim with the underlying army/economy/supply trend.
+Selecting or expanding a phase highlights the corresponding graph interval. The phase-to-chart relationship is represented through stable IDs and time ranges in the API contract and covered by automated frontend or contract tests.
 
-On mobile, the graph remains usable through a series selector, horizontal interaction or another documented responsive pattern. Labels and evidence access must remain available.
+Responsive behaviour SHALL preserve access to series selection, labels and evidence. A separate manual mobile-browser sign-off is not required by this change.
 
 ### 6. Early decline
 
@@ -174,9 +165,7 @@ The causal wording remains conservative:
 - a supported hypothesis may use `contributed to`;
 - the system must not state that the loss certainly caused the opponent's attack or prove player intent.
 
-Implementation handoff:
-
-- `ACTUAL: transition ID, time range, before/after army values and combat evidence`
+Regression assertions include the transition time range, before/after army values and combat evidence references.
 
 ### 7. Successful adaptation and recovery
 
@@ -184,20 +173,13 @@ The report explicitly recognizes a later improvement or stabilization rather tha
 
 Where supported by the bundle, it connects Hellion, Marine and Siege Tank changes to the defensive adaptation using `ENABLED`, `RECOVERED_FROM`, or cautious equivalent semantics.
 
-Implementation handoff:
-
-- `ACTUAL: recovery transition and phase`
-- `ACTUAL: supporting units, values, timestamps and confidence`
+Regression assertions include the recovery transition, supporting units, values, timestamps and confidence.
 
 ### 8. Mid-game improvement
 
 The report shows a competitive or favourable trajectory during the recovered mid-game, approximately within the previously reviewed 12:00–16:00 region when the actual data supports it.
 
-This change does not label it a formal `AdvantageWindow` and does not claim a guaranteed win. The graph and phase evidence must nevertheless make the improvement visible.
-
-Implementation handoff:
-
-- `ACTUAL: mid-game phase range and relevant army/economy/supply values`
+This change does not label it a formal `AdvantageWindow` and does not claim a guaranteed win. The chart data and phase evidence must nevertheless make the improvement explicit.
 
 ### 9. Late deterioration
 
@@ -205,13 +187,9 @@ The narrative and graph show a clear late decline after the recovered period, in
 
 The section may describe severe deterioration or late decline, but it must not yet infer strategic defeat, production collapse or inability to recover unless those later capabilities have been implemented through a separate approved change.
 
-Implementation handoff:
-
-- `ACTUAL: late-decline phase range and before/after values`
-
 ### 10. Principal causal chain
 
-The website displays one ordered principal chain broadly equivalent to:
+The report displays one ordered principal chain broadly equivalent to:
 
 ```text
 early army loss
@@ -261,18 +239,10 @@ Downloaded Markdown contains the same:
 - evidence and uncertainty;
 - strategic-result `NOT_EVALUATED` status.
 
-The support-bundle JSON contains the structured narrative timeline and chart model used by the browser.
+The support-bundle JSON contains the structured narrative timeline and chart model used by the report.
 
 ### 14. No regressions
 
 Existing combat, context, recommendations, support-bundle generation, rebuild-for-player flow and report downloads still function.
 
 No existing result is silently removed or replaced by the narrative section.
-
-## Tester verdict
-
-The tester agent records one result:
-
-- `PASS` — all mandatory criteria are satisfied;
-- `PASS WITH DEVIATIONS` — usable result with explicitly listed non-critical deviations;
-- `FAIL` — missing coherent narrative, graph, evidence, parity, or required benchmark semantics.
