@@ -9,7 +9,7 @@
   }
 }
 
-sc2-coach.example.com {
+sc2-match-review.example.com {
   encode zstd gzip
 
   request_body {
@@ -23,7 +23,7 @@ sc2-coach.example.com {
     Permissions-Policy "camera=(), microphone=(), geolocation=()"
   }
 
-  reverse_proxy 127.0.0.1:18080 {
+  reverse_proxy 127.0.0.1:{$SC2_COACH_PORT} {
     transport http {
       dial_timeout 5s
       response_header_timeout 180s
