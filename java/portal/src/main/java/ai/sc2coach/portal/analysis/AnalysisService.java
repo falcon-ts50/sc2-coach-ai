@@ -4,6 +4,8 @@ import ai.sc2coach.domain.ReplayAnalysis;
 import ai.sc2coach.domain.ReplayAnalysisReader;
 import ai.sc2coach.domain.coach.CoachFeed;
 import ai.sc2coach.domain.coach.CoachFeedEngine;
+import ai.sc2coach.domain.combat.Combat;
+import ai.sc2coach.domain.combat.CombatEngine;
 import ai.sc2coach.domain.context.MatchContext;
 import ai.sc2coach.domain.context.MatchContextEngine;
 import ai.sc2coach.domain.context.TurningPoint;
@@ -20,6 +22,7 @@ import ai.sc2coach.domain.knowledge.Recommendation;
 import ai.sc2coach.domain.model.Match;
 import ai.sc2coach.domain.model.ReplayDomainMapper;
 import ai.sc2coach.domain.narrative.CoachNarrativeEngine;
+import ai.sc2coach.domain.narrative.CombatNarrativeEngine;
 import ai.sc2coach.domain.narrative.MatchNarrative;
 import ai.sc2coach.domain.narrative.NarrativeEngine;
 import lombok.RequiredArgsConstructor;
@@ -56,15 +59,20 @@ public final class AnalysisService {
     private final ArgumentDeltaEngine argumentDeltaEngine;
     private final NarrativeEngine narrativeEngine;
     private final CoachNarrativeEngine coachNarrativeEngine;
+    private final CombatNarrativeEngine combatNarrativeEngine;
+    private final CombatEngine combatEngine;
     private final ReplayUploadValidator uploadValidator;
 
     public AnalysisResponse analyze(MultipartFile replay) {
+        return analyze(replay, null);
+    }
+
+    public AnalysisResponse analyze(MultipartFile replay, String requestedFocusPlayer) {
         String analysisId = UUID.randomUUID().toString();
         long startedAt = System.nanoTime();
         String filename = uploadValidator.validateMetadata(replay);
         long replaySize = replay.getSize();
-
-        log.info("analysis_started id={} replaySizeBytes={} filenameExtension=.SC2Replay", analysisId, replaySize);
+        log.info("analysis_started id={} replaySizeBytes={} focusPlayer={}", analysisId, replaySize, requestedFocusPlayer);
 
         try (TemporaryWorkspace workspace = TemporaryWorkspace.create()) {
             Path replayPath = workspace.replayPath(filename);
@@ -79,6 +87,7 @@ public final class AnalysisService {
 
             long analysisStartedAt = System.nanoTime();
             ReplayAnalysis analysis = reader.read(analysisPath);
+            String focusPlayer = resolveFocusPlayer(analysis, requestedFocusPlayer);
             Match match = domainMapper.map(analysis);
             MatchContext matchContext = contextEngine.analyze(match);
             List<TurningPoint> turningPoints = turningPointEngine.detect(matchContext);
@@ -86,53 +95,39 @@ public final class AnalysisService {
             List<Recommendation> recommendations = knowledgeEngine.evaluate(
                     new KnowledgeContext(match, matchContext, turningPoints, decisions)
             );
-            CoachFeed feed = coachFeedEngine.build(
-                    match, matchContext, turningPoints, decisions, recommendations
-            );
+            CoachFeed feed = coachFeedEngine.build(match, matchContext, turningPoints, decisions, recommendations);
+            List<Combat> combats = combatEngine.detect(analysis, focusPlayer);
 
             List<Episode> episodes = episodeEngine.build(turningPoints, decisions);
             List<ArgumentDelta> deltas = argumentDeltaEngine.calculate(matchContext);
-            MatchNarrative narrative = narrativeEngine.build(
-                    episodes, deltas, matchContext.summary().finalLeaderName()
-            );
-            String narrativeText = coachNarrativeEngine.render(narrative);
+            MatchNarrative narrative = narrativeEngine.build(episodes, deltas, matchContext.summary().finalLeaderName());
+            String fallbackNarrative = coachNarrativeEngine.render(narrative);
+            String narrativeText = combatNarrativeEngine.render(focusPlayer, combats, fallbackNarrative);
             CoachFeed.Card narrativeCard = new CoachFeed.Card(
-                    Duration.ZERO,
-                    CoachFeed.Kind.INFO,
-                    CoachFeed.Impact.HIGH,
-                    "Как развивался матч",
-                    narrativeText,
-                    0.8
+                    Duration.ZERO, CoachFeed.Kind.INFO, CoachFeed.Impact.HIGH,
+                    "Как развивался матч", narrativeText, combats.isEmpty() ? 0.65 : 0.84
             );
             List<CoachFeed.Card> cards = Stream.concat(Stream.of(narrativeCard), feed.cards().stream())
                     .limit(6)
                     .toList();
             CoachFeed coachFeed = new CoachFeed(
-                    feed.headline(),
+                    "Разбор матча для " + focusPlayer + ". " + feed.headline(),
                     cards,
                     feed.nextGameRecommendations()
             );
+
             long analysisTimeMs = elapsedMillis(analysisStartedAt);
             long totalTimeMs = elapsedMillis(startedAt);
-
             var diagnostics = new AnalysisResponse.Diagnostics(
-                    analysisId,
-                    APPLICATION_VERSION,
-                    GIT_COMMIT,
-                    Instant.now(),
-                    replaySize,
-                    decodeTimeMs,
-                    analysisTimeMs,
-                    totalTimeMs
+                    analysisId, APPLICATION_VERSION, GIT_COMMIT, Instant.now(), replaySize,
+                    decodeTimeMs, analysisTimeMs, totalTimeMs
             );
+            log.info("analysis_completed id={} focusPlayer={} combats={} totalTimeMs={}",
+                    analysisId, focusPlayer, combats.size(), totalTimeMs);
 
-            log.info(
-                    "analysis_completed id={} decodeTimeMs={} analysisTimeMs={} totalTimeMs={} players={} turningPoints={}",
-                    analysisId, decodeTimeMs, analysisTimeMs, totalTimeMs,
-                    analysis.players().size(), turningPoints.size()
+            return AnalysisResponse.from(
+                    analysis, focusPlayer, matchContext, turningPoints, combats, coachFeed, diagnostics
             );
-
-            return AnalysisResponse.from(analysis, matchContext, turningPoints, coachFeed, diagnostics);
         } catch (IOException exception) {
             log.error("analysis_failed id={} reason=io", analysisId, exception);
             throw new ReplayDecodingException("Could not process replay upload. Analysis ID: " + analysisId, exception);
@@ -140,6 +135,18 @@ public final class AnalysisService {
             log.error("analysis_failed id={} reason={}", analysisId, exception.getClass().getSimpleName(), exception);
             throw exception;
         }
+    }
+
+    private static String resolveFocusPlayer(ReplayAnalysis analysis, String requested) {
+        if (requested != null && !requested.isBlank()) {
+            return analysis.players().stream()
+                    .map(ReplayAnalysis.Player::name)
+                    .filter(name -> name.equalsIgnoreCase(requested))
+                    .findFirst()
+                    .orElseThrow(() -> new IllegalArgumentException("Unknown focus player: " + requested));
+        }
+        if (analysis.focusPlayer() != null && !analysis.focusPlayer().isBlank()) return analysis.focusPlayer();
+        return analysis.players().stream().findFirst().map(ReplayAnalysis.Player::name).orElse(null);
     }
 
     private static long elapsedMillis(long startedAtNanos) {

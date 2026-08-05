@@ -2,6 +2,7 @@ package ai.sc2coach.portal.analysis;
 
 import ai.sc2coach.domain.ReplayAnalysisReader;
 import ai.sc2coach.domain.coach.CoachFeedEngine;
+import ai.sc2coach.domain.combat.CombatEngine;
 import ai.sc2coach.domain.context.MatchContextEngine;
 import ai.sc2coach.domain.context.TurningPointEngine;
 import ai.sc2coach.domain.decision.DecisionEngine;
@@ -10,6 +11,7 @@ import ai.sc2coach.domain.episode.EpisodeEngine;
 import ai.sc2coach.domain.knowledge.KnowledgeEngine;
 import ai.sc2coach.domain.model.ReplayDomainMapper;
 import ai.sc2coach.domain.narrative.CoachNarrativeEngine;
+import ai.sc2coach.domain.narrative.CombatNarrativeEngine;
 import ai.sc2coach.domain.narrative.NarrativeEngine;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockMultipartFile;
@@ -54,6 +56,7 @@ class AnalysisServiceTest {
         AnalysisResponse response = service.analyze(upload);
 
         assertThat(response.map()).isEqualTo("Cleanup Test");
+        assertThat(response.focusPlayer()).isEqualTo("Alpha");
         assertThat(response.players()).singleElement()
                 .extracting(AnalysisResponse.PlayerSummary::name)
                 .isEqualTo("Alpha");
@@ -80,6 +83,8 @@ class AnalysisServiceTest {
                 new ArgumentDeltaEngine(),
                 new NarrativeEngine(),
                 new CoachNarrativeEngine(),
+                new CombatNarrativeEngine(),
+                new CombatEngine(),
                 new ReplayUploadValidator()
         );
     }
