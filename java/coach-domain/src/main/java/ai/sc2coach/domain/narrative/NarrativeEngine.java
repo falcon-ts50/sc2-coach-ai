@@ -34,7 +34,8 @@ public final class NarrativeEngine {
     private List<ArgumentDelta> nearbyDeltas(Episode episode, List<ArgumentDelta> deltas) {
         if (deltas == null) return List.of();
         return deltas.stream()
-                .filter(delta -> !delta.to().isBefore(episode.from()) && !delta.from().isAfter(episode.to()))
+                .filter(delta -> delta.to().compareTo(episode.from()) >= 0
+                        && delta.from().compareTo(episode.to()) <= 0)
                 .sorted(Comparator.comparingInt((ArgumentDelta delta) -> weight(delta.significance())).reversed())
                 .limit(3)
                 .toList();
