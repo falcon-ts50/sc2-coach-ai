@@ -79,3 +79,13 @@ The same identity is exposed through an API and displayed on the site so stale d
 **Status:** Accepted
 
 `docs/PROJECT_STATE.md`, this file, `ROADMAP.md`, and current GitHub PR state are the source of truth between ChatGPT sessions. Conversational memory is helpful context but is not relied upon for exact technical state.
+
+## ADR-010 — Combat Detector V3 staging
+
+**Status:** Accepted
+
+Combat Detector V3 is introduced behind separate domain contracts before it replaces the production `CombatEngine`.
+
+The detector separates raw combat evidence extraction, spatial-temporal clustering, and final `Combat` assembly. Clustering uses configurable time and map-distance thresholds as explicit heuristics. Missing spatial data reduces confidence and is surfaced on the cluster rather than silently inferred.
+
+This staged approach keeps the live report stable while regression tests lock in the expected behaviour for simultaneous fights, team-game participants, and victim-owner attribution.
