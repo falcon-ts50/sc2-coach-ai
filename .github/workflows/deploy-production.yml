@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: sc2-coach-production
@@ -26,6 +26,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - run: python -m pip install -r requirements-dev.txt
       - run: pytest -q
+      - run: python scripts/release_version.py --check-sync
 
   java-build:
     name: java and image build
@@ -49,12 +50,39 @@ jobs:
         working-directory: java
         run: mvn --batch-mode --no-transfer-progress verify
       - name: Build production image
-        run: docker build -t sc2-coach-ai:ci .
+        run: docker build --build-arg APP_VERSION="$(cat VERSION)" -t sc2-coach-ai:ci .
+
+  tag:
+    name: tag release
+    runs-on: ubuntu-latest
+    needs: [python-tests, java-build]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Create immutable release tag
+        run: |
+          set -euo pipefail
+          VERSION="$(python3 scripts/release_version.py --check-sync)"
+          TAG="v${VERSION}"
+          git fetch --tags --force
+          if git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; then
+            TAG_SHA="$(git rev-list -n 1 "$TAG")"
+            if [ "$TAG_SHA" != "$GITHUB_SHA" ]; then
+              echo "::error::${TAG} already points to ${TAG_SHA}, not ${GITHUB_SHA}."
+              exit 1
+            fi
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" -m "SC2 Coach ${VERSION}"
+          git push origin "$TAG"
 
   deploy:
     name: deploy to nukle.nexus
     runs-on: ubuntu-latest
-    needs: [python-tests, java-build]
+    needs: [tag]
     steps:
       - name: Prepare SSH
         env:

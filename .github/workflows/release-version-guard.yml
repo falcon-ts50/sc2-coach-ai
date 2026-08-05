@@ -1,0 +1,35 @@
+name: release-version-guard
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, edited]
+
+permissions:
+  contents: read
+
+jobs:
+  version:
+    name: release version guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Validate release version
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          CURRENT_VERSION="$(python3 scripts/release_version.py --check-sync)"
+          if git cat-file -e "${BASE_SHA}:VERSION" 2>/dev/null; then
+            PREVIOUS_VERSION="$(git show "${BASE_SHA}:VERSION" | tr -d '[:space:]')"
+          else
+            PREVIOUS_VERSION="0.8.0"
+          fi
+          python3 scripts/release_version.py --previous "$PREVIOUS_VERSION" --check-sync
+          git fetch --tags --force
+          if git rev-parse -q --verify "refs/tags/v${CURRENT_VERSION}" >/dev/null; then
+            echo "::error::Tag v${CURRENT_VERSION} already exists."
+            exit 1
+          fi
