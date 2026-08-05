@@ -20,9 +20,10 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --system --home-dir /nonexistent --shell /usr/sbin/nologin sc2coach
 
-COPY requirements.txt analyze.py ./
+COPY requirements.txt ./*.py ./
 COPY --from=java-build /src/java/portal/target/portal-*.jar ./portal.jar
 RUN pip3 install --break-system-packages --no-cache-dir -r requirements.txt
+RUN python3 -c "import analyze"
 
 ENV SC2_COACH_PYTHON=python3
 ENV SC2_COACH_DECODER_SCRIPT=/app/analyze.py
