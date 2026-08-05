@@ -42,6 +42,7 @@ SC2Replay
 - Regression coverage for spatially separated fights, missing coordinates, victim ownership and team participants.
 - Information Engine V1 domain contracts for scouting-derived potential information, gaps, response candidates and information state.
 - Narrative Analysis V1 vertical slice exposes a backend-owned player-focused timeline, preliminary verdict, state transitions, cautious causal chain and match-overview chart model through REST, Markdown, support bundle and the React report.
+- Narrative evidence visualization exposes backend-owned all-participant army/economy/supply comparison series, shared evidence focus references, and team-aware combat force tables through REST, Markdown, support bundle and the React report.
 
 ## Known limitations
 
@@ -51,6 +52,7 @@ SC2Replay
 - Narrative Analysis V1 is preliminary and does not infer strategic result, player intent, vision certainty, or guaranteed causal outcomes; `strategicResultStatus` remains `NOT_EVALUATED`.
 - Army reconstruction is lifecycle-event based and can be incomplete when replay events omit ownership or transformations.
 - Combat additions mean units that became available during the engagement interval; the report does not claim those units physically joined the local fight unless future spatial evidence supports that.
+- Per-unit combat kill credit is marked unavailable in Narrative Evidence because the current production combat DTO does not expose stable killer-unit identity; unknown kill credit must not be rendered as zero.
 - Combat outcome is heuristic, not a full simulation of tactical value.
 - Unit display-name normalization is incomplete compared with the full Blizzard localization catalog.
 - Narrative quality depends on confidence of combat reconstruction and macro metrics.

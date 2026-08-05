@@ -13,6 +13,7 @@ public record NarrativeAnalysis(
         NarrativeTimeline timeline,
         NarrativeSummary summary,
         NarrativeChartModel chart,
+        NarrativeEvidence evidence,
         List<String> limitations
 ) {
     public NarrativeAnalysis {
@@ -25,6 +26,7 @@ public record NarrativeAnalysis(
         timeline = timeline == null ? NarrativeTimeline.empty() : timeline;
         summary = summary == null ? NarrativeSummary.empty() : summary;
         chart = chart == null ? NarrativeChartModel.empty() : chart;
+        evidence = evidence == null ? NarrativeEvidence.empty() : evidence;
         limitations = limitations == null ? List.of() : List.copyOf(limitations);
     }
 
@@ -40,6 +42,7 @@ public record NarrativeAnalysis(
                 NarrativeTimeline.empty(),
                 NarrativeSummary.empty(),
                 NarrativeChartModel.empty(),
+                NarrativeEvidence.empty(),
                 List.of("Not enough normalized match context frames to build a narrative timeline.")
         );
     }

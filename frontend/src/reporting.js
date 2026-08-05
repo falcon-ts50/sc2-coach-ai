@@ -61,12 +61,71 @@ export function narrativeAnalysisMarkdown(analysis) {
     const last = points[points.length - 1];
     lines.push(`- ${series.label}: ${series.completeness || '—'}, ${points.length} точек${first && last ? `, ${clock(durationSeconds(first.at))}=${Math.round(first.value)}, ${clock(durationSeconds(last.at))}=${Math.round(last.value)}` : ''}`);
   });
+  if (narrative.evidence) {
+    lines.push('', '### Сравнение участников', '');
+    (narrative.evidence.metricComparisons || []).forEach(metric => {
+      lines.push(`- ${metric.label}: ${metric.completeness || '—'}, ${(metric.series || []).length} серий`);
+      (metric.series || []).forEach(series => {
+        const participant = participantById(narrative.evidence, series.participantId);
+        const points = series.points || [];
+        const first = points[0];
+        const last = points[points.length - 1];
+        lines.push(`  - ${participantName(participant)} (${relationshipText(participant)}): ${series.completeness || '—'}, ${series.lineStyle || 'solid'}, ${points.length} точек${first && last ? `, ${clock(durationSeconds(first.at))}=${Math.round(first.value)}, ${clock(durationSeconds(last.at))}=${Math.round(last.value)}` : ''}`);
+      });
+    });
+    lines.push('', '### Боевые evidence-таблицы', '');
+    (narrative.evidence.combats || []).forEach(combat => {
+      lines.push(`#### ${combat.label} · ${clock(durationSeconds(combat.startedAt))}–${clock(durationSeconds(combat.endedAt))}`);
+      (combat.sides || []).forEach(side => {
+        lines.push(`- ${side.label}: ${side.completeness || '—'}`);
+        pushUnitRows(lines, '  - Итого', side.totalRows || []);
+        (side.participants || []).forEach(player => {
+          lines.push(`  - ${player.player}: ${player.reconciliationStatus || '—'}, ${player.completeness || '—'}`);
+          pushUnitRows(lines, '    - Боевые юниты', player.rows || []);
+          lines.push(`    - Рабочие: ${composition(player.workerLosses)}`);
+          lines.push(`    - Здания: ${composition(player.structureLosses)}`);
+          lines.push(`    - Оборона: ${composition(player.staticDefenseLosses)}`);
+        });
+      });
+      (combat.notes || []).forEach(note => lines.push(`- Примечание: ${note}`));
+    });
+  }
   if ((narrative.limitations || []).length) {
     lines.push('', '### Ограничения', '');
     narrative.limitations.forEach(item => lines.push(`- ${item}`));
   }
   lines.push('');
   return lines;
+}
+
+function pushUnitRows(lines, label, rows) {
+  if (!rows.length) {
+    lines.push(`${label}: нет`);
+    return;
+  }
+  rows.forEach(row => lines.push(`${label}: ${row.unit}: старт ${row.startCount}, новые ${row.additions}, потери ${row.losses}, финиш ${row.endCount}, kills ${countEvidence(row.creditedKills)}, ${row.reconciliationStatus || row.completeness || '—'}`));
+}
+
+function participantById(evidence, participantId) {
+  return (evidence.participants || []).find(participant => participant.id === participantId);
+}
+
+function participantName(participant) {
+  return participant?.displayName || 'unknown';
+}
+
+function relationshipText(participant) {
+  return {
+    SELECTED: 'фокус',
+    TEAMMATE: 'союзник',
+    OPPONENT: 'соперник',
+    UNKNOWN: 'роль неизвестна',
+  }[participant?.relationship] || 'роль неизвестна';
+}
+
+function countEvidence(value) {
+  if (!value || value.value == null) return 'нет данных';
+  return String(value.value);
 }
 
 export function narrativeText(analysis) {
