@@ -1,42 +1,140 @@
 # SC2 Coach AI
 
-Open-source tooling for decoding StarCraft II replay files and turning deterministic replay data into actionable coaching feedback.
+SC2 Coach is an open-source StarCraft II replay coaching platform. A player explicitly uploads a `.SC2Replay` file and receives an explainable match report: relative player comparison, lead history, turning points, detected decisions, Coach Feed recommendations, and a downloadable Markdown summary.
 
-## Status
+The project evaluates decisions rather than players. Every recommendation should be traceable to replay-derived evidence, and heuristics must be labelled as heuristics.
 
-The project is currently at `v0.5`:
+## Current status
 
-- reads `.SC2Replay` files locally through `sc2reader` and Blizzard `s2protocol`;
-- exports replay metadata, players, teams, MMR, units, structures, upgrades, commands and periodic statistics;
-- generates coaching metrics, engagement analysis, charts and diagnostics;
-- produces explainable strategic recommendations with numeric evidence;
-- creates a polished A4 PDF report with embedded charts;
-- creates one ZIP containing all reports, charts and the PDF;
-- supports English by default and Russian through `--lang ru`.
+The deployable stateless MVP is complete:
 
-The replay is processed only after an explicit CLI invocation. There is no background watch mode.
+- Python decoder based on `sc2reader` and Blizzard `s2protocol`;
+- versioned replay JSON contract;
+- Java 25 domain and analysis core;
+- relative economy, army and supply context;
+- lead history and final measured leader;
+- decision detection (`ATTACK`, `REBUILD`, heuristic `EXPAND` and `TECH_SWITCH`);
+- turning-point detection;
+- Knowledge Engine with typed recommendations, evidence and confidence;
+- Coach Feed;
+- React/Vite browser interface;
+- Markdown report download;
+- single-container Docker deployment;
+- upload validation, rate limiting and hardened runtime configuration.
 
-## Quick start
+The current report is intentionally deterministic. It does not use an LLM to invent conclusions or winner probabilities.
+
+## Architecture
+
+```text
+.SC2Replay
+    -> Python decoder
+    -> replay_analysis.json
+    -> Java domain model
+    -> Context / Decisions / Turning Points
+    -> Knowledge Engine
+    -> Coach Feed
+    -> REST API
+    -> React report / Markdown
+```
+
+See [ARCHITECTURE.md](ARCHITECTURE.md) for module boundaries, explainability rules and the security model.
+
+## Quick local deployment
 
 Requirements:
 
-- Python 3.11+
-- Internet access for the initial dependency installation
-- DejaVu Sans fonts (`dejavu-fonts` on Arch/CachyOS, `fonts-dejavu-core` on Debian/Ubuntu)
+- Git;
+- Docker Engine;
+- Docker Compose plugin;
+- approximately 2 GB RAM for the running container;
+- additional build memory or swap for Maven and Vite.
 
 ```bash
-chmod +x sc2-coach
+git clone https://github.com/falcon-ts50/sc2-coach-ai.git
+cd sc2-coach-ai
+chmod +x deploy.sh
+./deploy.sh
 ```
 
-English reports are the default:
+The hardened Compose configuration binds the application only to:
+
+```text
+127.0.0.1:18080
+```
+
+For public deployment, put Caddy or another HTTPS reverse proxy in front of that address. A sample `Caddyfile` is included; replace `sc2-coach.example.com` with the real domain.
+
+Health check:
 
 ```bash
-./sc2-coach match.SC2Replay \
-  --player dragonDriver \
-  --out ./results/match
+curl http://127.0.0.1:18080/actuator/health
+docker compose ps
+docker compose logs --tail=100
 ```
 
-Russian reports:
+Subsequent updates use the same command:
+
+```bash
+./deploy.sh
+```
+
+## Security model
+
+The portal currently enforces:
+
+- explicit upload only;
+- maximum replay size of 25 MB;
+- safe filename handling;
+- `.SC2Replay` extension and MPQ archive signature checks;
+- up to three uploads per client per minute;
+- one in-flight analysis per client;
+- two global concurrent analyses;
+- decoder timeout;
+- constrained Tomcat connections and threads;
+- localhost-only backend binding;
+- non-root, read-only container;
+- dropped Linux capabilities and `no-new-privileges`;
+- bounded CPU, memory and PIDs;
+- temporary `tmpfs` workspaces and Docker healthcheck.
+
+This is a single-instance MVP. Shared queues, distributed rate limiting, accounts and persistent storage are deliberately deferred.
+
+## Developer workflows
+
+Python tests:
+
+```bash
+python -m pip install -r requirements-dev.txt
+python -m pytest -q
+```
+
+Java tests:
+
+```bash
+cd java
+mvn --batch-mode --no-transfer-progress verify
+```
+
+Frontend development:
+
+```bash
+cd frontend
+npm ci
+npm run dev
+```
+
+Production verification:
+
+```bash
+docker build -t sc2-coach-ai:test .
+```
+
+CI builds React, runs Java tests and builds the full production image.
+
+## Legacy CLI
+
+The original local pipeline remains useful for decoder debugging and detailed artifacts:
 
 ```bash
 ./sc2-coach match.SC2Replay \
@@ -45,100 +143,30 @@ Russian reports:
   --out ./results/match
 ```
 
-The complete pipeline is:
-
-```text
-decode
-  -> coaching analysis
-  -> engagement analysis
-  -> strategic coaching
-  -> charts
-  -> diagnostics
-  -> PDF report
-  -> review bundle
-```
-
-The main human-readable output is:
-
-```text
-results/match/sc2_coach_report.pdf
-```
-
-The complete shareable package is:
-
-```text
-results/match/sc2_coach_review_bundle.zip
-```
-
-When `--out` is omitted, the command creates a directory under `results/` using the replay filename.
-
-## PDF report
-
-The PDF is generated programmatically with ReportLab and includes:
-
-- a localized title page;
-- match metadata and focus-player macro cards;
-- prioritized strategic findings with severity, evidence and concrete actions;
-- a compact engagement table;
-- full-width army, worker, resource-bank, income-rate and army-loss charts;
-- page headers, footers and page numbers.
-
-The PDF does not invent new analysis. It presents the same deterministic facts and explainable rule results already exported in JSON and Markdown.
-
-## Localization contract
-
-`--lang` accepts:
-
-- `en` — default;
-- `ru` — Russian Markdown reports, PDF report and CLI messages.
-
-JSON field names, categories, evidence metric names and `rule_id` values remain stable English identifiers for API compatibility. Human-readable strategic titles, explanations and recommendations follow the selected language.
-
-## Low-level commands
-
-The two-stage interface remains available for debugging:
+Low-level stages:
 
 ```bash
 sh run.sh match.SC2Replay --player dragonDriver --out ./results/match
 sh run_coach.sh ./results/match/replay_analysis.json --player dragonDriver --out ./results/match --lang ru
 ```
 
-## Outputs
+The web MVP currently exports Markdown rather than PDF. Historical CLI PDF and chart code remains in the repository but is not the primary portal output.
 
-```text
-results/match/replay_analysis.json
-results/match/replay_analysis.md
-results/match/coaching_analysis.json
-results/match/coaching_report.md
-results/match/battle_analysis.json
-results/match/battle_report.md
-results/match/strategic_analysis.json
-results/match/strategic_report.md
-results/match/sc2_coach_report.pdf
-results/match/review_summary.md
-results/match/diagnostics.json
-results/match/sc2_coach_review_bundle.zip
-results/match/charts/*.png
-```
+## Next work
 
-Engagement windows are inferred from death-event clusters. Resource trade values are estimates derived from cumulative army-loss deltas in nearby `PlayerStatsEvent` snapshots.
+Near-term priorities are driven by real replay testing:
 
-## Tests
+- richer timeline and argument-delta analysis;
+- a readable, AI-friendly replay transcript;
+- more complete unit, structure, upgrade and command evidence;
+- spatial events and coordinates where the replay protocol exposes them;
+- better Coach Feed density and explanations;
+- visual charts and timeline polish;
+- HTTPS deployment documentation and operational monitoring.
 
-```bash
-python -m pip install -r requirements-dev.txt
-python -m pytest -q
-```
+Longer-term Pro features may include replay history, personal trends, reference-replay and build-order comparison, cohort analysis, similar-state search and counterfactual decision analysis.
 
-## Roadmap
-
-- `v0.1`: stable decoder and versioned replay JSON
-- `v0.2`: economy, army and worker charts
-- `v0.3`: automatic engagement and turning-point detection
-- `v0.4`: explainable coaching rules and localization
-- `v0.5`: polished localized PDF report
-- `v0.6`: build-order comparison against reference replays
-- `v1.0`: web application with explicit replay upload and interactive analysis
+See [ROADMAP.md](ROADMAP.md) for scope and sequencing.
 
 ## License and trademarks
 
