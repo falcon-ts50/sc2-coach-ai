@@ -13,6 +13,8 @@ RUN cd java && mvn --batch-mode --no-transfer-progress -DskipTests package
 
 FROM eclipse-temurin:25-jre
 ARG APP_VERSION=0.7.0-SNAPSHOT
+ARG BUILD_NUMBER=local
+ARG BUILD_TIME=unknown
 ARG GIT_COMMIT=unknown
 WORKDIR /app
 RUN apt-get update \
@@ -28,6 +30,8 @@ RUN python3 -c "import analyze"
 ENV SC2_COACH_PYTHON=python3
 ENV SC2_COACH_DECODER_SCRIPT=/app/analyze.py
 ENV APP_VERSION=${APP_VERSION}
+ENV BUILD_NUMBER=${BUILD_NUMBER}
+ENV BUILD_TIME=${BUILD_TIME}
 ENV GIT_COMMIT=${GIT_COMMIT}
 ENV JAVA_OPTS="-XX:MaxRAMPercentage=70"
 ENV HOME=/tmp
