@@ -23,7 +23,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class AnalysisServiceTest {
 
     @Test
-    void decodesReadsAndDeletesTemporaryWorkspace() throws Exception {
+    void decodesReadsAddsDiagnosticsAndDeletesTemporaryWorkspace() throws Exception {
         AtomicReference<Path> replayPath = new AtomicReference<>();
         AtomicReference<Path> outputPath = new AtomicReference<>();
 
@@ -57,6 +57,10 @@ class AnalysisServiceTest {
         assertThat(response.players()).singleElement()
                 .extracting(AnalysisResponse.PlayerSummary::name)
                 .isEqualTo("Alpha");
+        assertThat(response.diagnostics()).isNotNull();
+        assertThat(response.diagnostics().analysisId()).isNotBlank();
+        assertThat(response.diagnostics().replaySizeBytes()).isEqualTo(4);
+        assertThat(response.diagnostics().totalTimeMs()).isGreaterThanOrEqualTo(0);
         assertThat(replayPath.get().getFileName().toString()).isEqualTo("unsafe.SC2Replay");
         assertThat(replayPath.get()).doesNotExist();
         assertThat(outputPath.get()).doesNotExist();

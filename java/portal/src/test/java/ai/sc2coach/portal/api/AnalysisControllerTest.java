@@ -14,6 +14,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 
@@ -49,11 +50,16 @@ class AnalysisControllerTest {
                         CoachFeed.Impact.HIGH, "Перелом", "Преимущество изменилось.", 0.8)),
                 List.of("Сохраняй армию после неудачного боя.")
         );
+        var diagnostics = new AnalysisResponse.Diagnostics(
+                "analysis-123", "0.7.0", "abcdef1", Instant.parse("2026-08-05T11:00:00Z"),
+                183_431, 750, 120, 870
+        );
         given(analysisService.analyze(any())).willReturn(new AnalysisResponse(
                 "0.2.0", "Test Map", 120.0,
                 List.of(new AnalysisResponse.PlayerSummary(1, "Alpha", "Terran", 1, "Win", 3500, 100.0)),
                 comparison, new MatchContext(List.of(), summary), List.of(point), feed,
-                "# Transcript\n\n- `01:30` **Alpha** — command: Attack"
+                "# Transcript\n\n- `01:30` **Alpha** — command: Attack",
+                diagnostics
         ));
         MockMultipartFile replay = new MockMultipartFile(
                 "replay", "match.SC2Replay", "application/octet-stream", new byte[]{1}
@@ -64,6 +70,8 @@ class AnalysisControllerTest {
                 .andExpect(jsonPath("$.matchContext.summary.finalLeaderName").value("Alpha"))
                 .andExpect(jsonPath("$.turningPoints[0].newLeaderName").value("Alpha"))
                 .andExpect(jsonPath("$.coachFeed.cards[0].title").value("Перелом"))
-                .andExpect(jsonPath("$.transcriptMarkdown").value(org.hamcrest.Matchers.containsString("Attack")));
+                .andExpect(jsonPath("$.transcriptMarkdown").value(org.hamcrest.Matchers.containsString("Attack")))
+                .andExpect(jsonPath("$.diagnostics.analysisId").value("analysis-123"))
+                .andExpect(jsonPath("$.diagnostics.totalTimeMs").value(870));
     }
 }
