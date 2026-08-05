@@ -99,3 +99,17 @@ Scouting and information analysis are owned by a separate Information Engine, no
 The Information Engine answers what a player potentially could know, what information was missing, and which later actions are response candidates. Combat analysis may later consume this information as context, but information analysis must not depend on combat outcomes.
 
 Replay data does not contain a complete vision log or player intent. User-facing and narrative contracts therefore use `Potentially Observed` and `Response Candidate` language, never causal claims such as "the player saw" or "the player decided because".
+
+## ADR-012 — Combat additions and reconciliation
+
+**Status:** Accepted
+
+Combat history exposes a participant's army at the beginning and end of each engagement, plus combat-unit additions during the engagement interval and categorized losses.
+
+The additions row means units became available during the time window. It does not claim that every produced unit physically reached or participated in the local fight unless later spatial evidence explicitly supports that conclusion.
+
+For each combat unit type, the report should reconcile:
+
+`army at start + additions - combat losses = army at end`
+
+When replay lifecycle data cannot support exact reconciliation, the participant must be marked partial/incomplete instead of silently presenting contradictory counts.

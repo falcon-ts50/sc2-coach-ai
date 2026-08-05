@@ -6,6 +6,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -20,7 +21,7 @@ public final class CombatEngine {
     private static final double MIN_ATTACK_GAP_SECONDS = 30;
 
     public List<Combat> detect(ReplayAnalysis analysis, String focusPlayer) {
-        return analysis.timeline().stream()
+        List<Combat> detected = analysis.timeline().stream()
                 .filter(this::isAttackCommand)
                 .sorted(Comparator.comparingDouble(event -> value(event.time())))
                 .filter(new SpacedAttackPredicate())
@@ -31,6 +32,11 @@ public final class CombatEngine {
                         || combat.participants().stream().anyMatch(p -> p.player().equalsIgnoreCase(focusPlayer)))
                 .limit(8)
                 .toList();
+        var ordered = new ArrayList<Combat>();
+        for (int index = 0; index < detected.size(); index++) {
+            ordered.add(withStableIdentity(detected.get(index), index + 1));
+        }
+        return List.copyOf(ordered);
     }
 
     private Combat buildCombat(ReplayAnalysis analysis, ReplayAnalysis.TimelineEvent attack) {
@@ -81,6 +87,31 @@ public final class CombatEngine {
         );
     }
 
+    private Combat withStableIdentity(Combat combat, int ordinal) {
+        String participants = combat.participants().stream()
+                .map(Combat.Participant::player)
+                .map(player -> lower(player).replaceAll("[^a-z0-9]+", "-"))
+                .collect(Collectors.joining("-"));
+        String id = "combat-%02d-%03d-%03d-%s".formatted(
+                ordinal,
+                Math.round(combat.startedAt().toMillis() / 1000.0),
+                Math.round(combat.endedAt().toMillis() / 1000.0),
+                participants.isBlank() ? "unknown" : participants
+        );
+        return new Combat(
+                combat.startedAt(),
+                combat.endedAt(),
+                combat.initiator(),
+                combat.opponent(),
+                combat.winner(),
+                combat.participants(),
+                combat.location(),
+                combat.confidence(),
+                id,
+                "Бой " + ordinal
+        );
+    }
+
     private Combat.Participant participant(
             ReplayAnalysis analysis,
             String player,
@@ -93,20 +124,75 @@ public final class CombatEngine {
                 .map(event -> deathUnitName(analysis, event))
                 .filter(Objects::nonNull)
                 .toList();
+        var before = armyAt(analysis, player, start);
+        var additions = additionsDuring(analysis, player, start, end);
+        var unitsLost = grouped(playerDeaths, this::isCombatUnit);
+        var after = armyAt(analysis, player, end);
+        var issues = reconciliationIssues(before, additions, unitsLost, after);
 
         return new Combat.Participant(
                 player,
-                armyAt(analysis, player, start),
-                armyAt(analysis, player, end),
-                grouped(playerDeaths, this::isCombatUnit),
+                before,
+                additions,
+                after,
+                unitsLost,
                 grouped(playerDeaths, this::isWorker),
                 grouped(playerDeaths, unit -> isStructure(unit) && !isStaticDefense(unit)),
                 grouped(playerDeaths, this::isStaticDefense),
                 completedUpgrades(analysis, player, start, this::isLevelUpgrade),
                 completedUpgrades(analysis, player, start, upgrade -> !isLevelUpgrade(upgrade)),
                 armyValueAt(analysis, player, start),
-                armyValueAt(analysis, player, end)
+                armyValueAt(analysis, player, end),
+                issues.isEmpty() ? Combat.ReconciliationStatus.EXACT : Combat.ReconciliationStatus.PARTIAL,
+                issues
         );
+    }
+
+    private Map<String, Integer> additionsDuring(ReplayAnalysis analysis, String player, double start, double end) {
+        return sortedCounts(analysis.timeline().stream()
+                .filter(event -> value(event.time()) > start && value(event.time()) <= end)
+                .filter(this::isBirth)
+                .filter(event -> player.equalsIgnoreCase(ownerForLifecycleEvent(analysis, event)))
+                .map(event -> lifecycleUnitName(analysis, event))
+                .filter(this::isCombatUnit)
+                .map(Sc2DisplayNames::unit)
+                .toList());
+    }
+
+    private List<Combat.ReconciliationIssue> reconciliationIssues(
+            Map<String, Integer> before,
+            Map<String, Integer> additions,
+            Map<String, Integer> losses,
+            Map<String, Integer> after
+    ) {
+        var units = new LinkedHashSet<String>();
+        units.addAll(before.keySet());
+        units.addAll(additions.keySet());
+        units.addAll(losses.keySet());
+        units.addAll(after.keySet());
+
+        return units.stream()
+                .sorted()
+                .map(unit -> {
+                    int start = count(before, unit);
+                    int added = count(additions, unit);
+                    int lost = count(losses, unit);
+                    int expected = start + added - lost;
+                    int actual = count(after, unit);
+                    if (expected == actual) return null;
+                    return new Combat.ReconciliationIssue(
+                            unit,
+                            start,
+                            added,
+                            lost,
+                            expected,
+                            actual,
+                            actual - expected,
+                            "Replay lifecycle evidence does not exactly reconcile this unit type; transformations or missing ownership events may be involved."
+                    );
+                })
+                .filter(Objects::nonNull)
+                .toList();
     }
 
     private String teamWinner(ReplayAnalysis analysis, List<Combat.Participant> participants) {
@@ -129,9 +215,7 @@ public final class CombatEngine {
     }
 
     private Map<String, Integer> grouped(List<String> units, Predicate<String> category) {
-        return units.stream().filter(category)
-                .collect(Collectors.groupingBy(Sc2DisplayNames::unit, LinkedHashMap::new,
-                        Collectors.summingInt(ignored -> 1)));
+        return sortedCounts(units.stream().filter(category).map(Sc2DisplayNames::unit).toList());
     }
 
     private List<String> completedUpgrades(
@@ -168,9 +252,22 @@ public final class CombatEngine {
                             (ignored, count) -> Math.max(0, count - 1));
                 });
         counts.values().removeIf(count -> count <= 0);
+        return sortCounts(counts);
+    }
+
+    private Map<String, Integer> sortedCounts(List<String> values) {
+        var counts = values.stream()
+                .filter(Objects::nonNull)
+                .filter(value -> !value.isBlank())
+                .collect(Collectors.groupingBy(value -> value, LinkedHashMap::new,
+                        Collectors.summingInt(ignored -> 1)));
+        return sortCounts(counts);
+    }
+
+    private Map<String, Integer> sortCounts(Map<String, Integer> counts) {
         return counts.entrySet().stream()
-                .sorted(Map.Entry.<String, Integer>comparingByValue().reversed())
-                .limit(12)
+                .sorted(Map.Entry.<String, Integer>comparingByValue().reversed()
+                        .thenComparing(Map.Entry.comparingByKey()))
                 .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue,
                         (left, right) -> left, LinkedHashMap::new));
     }
@@ -280,7 +377,7 @@ public final class CombatEngine {
                 || value.contains("forge") || value.contains("spire") || value.contains("den")
                 || value.contains("core") || value.contains("archive") || value.contains("bay")
                 || value.contains("pool") || value.contains("chamber") || value.contains("nest")
-                || value.contains("warren");
+                || value.contains("warren") || value.contains("infestationpit");
     }
 
     private boolean isNoise(String unit) {
@@ -311,6 +408,10 @@ public final class CombatEngine {
 
     private int count(Map<String, Integer> values) {
         return values.values().stream().mapToInt(Integer::intValue).sum();
+    }
+
+    private int count(Map<String, Integer> values, String unit) {
+        return values.getOrDefault(unit, 0);
     }
 
     private String playerName(ReplayAnalysis analysis, Object player) {
