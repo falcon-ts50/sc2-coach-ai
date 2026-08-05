@@ -50,9 +50,10 @@ class AnalysisControllerTest {
                 List.of("Сохраняй армию после неудачного боя.")
         );
         given(analysisService.analyze(any())).willReturn(new AnalysisResponse(
-                "0.1.0", "Test Map", 120.0,
+                "0.2.0", "Test Map", 120.0,
                 List.of(new AnalysisResponse.PlayerSummary(1, "Alpha", "Terran", 1, "Win", 3500, 100.0)),
-                comparison, new MatchContext(List.of(), summary), List.of(point), feed
+                comparison, new MatchContext(List.of(), summary), List.of(point), feed,
+                "# Transcript\n\n- `01:30` **Alpha** — command: Attack"
         ));
         MockMultipartFile replay = new MockMultipartFile(
                 "replay", "match.SC2Replay", "application/octet-stream", new byte[]{1}
@@ -62,6 +63,7 @@ class AnalysisControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.matchContext.summary.finalLeaderName").value("Alpha"))
                 .andExpect(jsonPath("$.turningPoints[0].newLeaderName").value("Alpha"))
-                .andExpect(jsonPath("$.coachFeed.cards[0].title").value("Перелом"));
+                .andExpect(jsonPath("$.coachFeed.cards[0].title").value("Перелом"))
+                .andExpect(jsonPath("$.transcriptMarkdown").value(org.hamcrest.Matchers.containsString("Attack")));
     }
 }

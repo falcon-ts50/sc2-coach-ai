@@ -56,12 +56,12 @@ function App() {
     });
     lines.push('## На следующую игру', '');
     (feed.nextGameRecommendations || []).forEach((item, index) => lines.push(`${index + 1}. ${item}`));
-    const blob = new Blob([lines.join('\n')], { type: 'text/markdown;charset=utf-8' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = 'sc2-coach-report.md';
-    link.click();
-    URL.revokeObjectURL(link.href);
+    downloadText(lines.join('\n'), 'sc2-coach-report.md');
+  }
+
+  function downloadTranscript() {
+    if (!analysis?.transcriptMarkdown) return;
+    downloadText(analysis.transcriptMarkdown, 'sc2-coach-replay-transcript.md');
   }
 
   return <main>
@@ -83,11 +83,11 @@ function App() {
       {status && <p className={status === 'Анализ готов' ? 'status success' : 'status'}>{status}</p>}
     </section>
 
-    {analysis && <Report analysis={analysis} onDownload={downloadMarkdown} />}
+    {analysis && <Report analysis={analysis} onDownload={downloadMarkdown} onTranscript={downloadTranscript} />}
   </main>;
 }
 
-function Report({ analysis, onDownload }) {
+function Report({ analysis, onDownload, onTranscript }) {
   const summary = analysis.matchContext?.summary || {};
   const feed = analysis.coachFeed || {};
   const ranking = analysis.comparison?.ranking || [];
@@ -100,7 +100,7 @@ function Report({ analysis, onDownload }) {
     </section>
 
     <section className="panel feed">
-      <div className="section-heading"><div><span>Главное за матч</span><h2>{feed.headline || 'Coach Feed'}</h2></div><button className="secondary" onClick={onDownload}>Скачать Markdown</button></div>
+      <div className="section-heading"><div><span>Главное за матч</span><h2>{feed.headline || 'Coach Feed'}</h2></div><div className="actions"><button className="secondary" onClick={onDownload}>Скачать отчёт</button><button className="secondary" disabled={!analysis.transcriptMarkdown} onClick={onTranscript}>Скачать расшифровку для ИИ</button></div></div>
       <div className="feed-grid">
         {(feed.cards || []).map((card, index) => <article className={`feed-card kind-${String(card.kind).toLowerCase()}`} key={`${card.at}-${index}`}>
           <div className="card-meta"><span>{clock(durationSeconds(card.at))}</span><span>{impactLabels[card.impact] || card.impact}</span></div>
@@ -127,6 +127,7 @@ function Report({ analysis, onDownload }) {
   </>;
 }
 
+function downloadText(text, filename) { const blob = new Blob([text], { type: 'text/markdown;charset=utf-8' }); const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = filename; link.click(); URL.revokeObjectURL(link.href); }
 function Metric({ label, value }) { return <div className="metric"><span>{label}</span><strong>{value}</strong></div>; }
 function durationSeconds(value) { const m = String(value || '').match(/^PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?$/); return m ? Number(m[1] || 0) * 3600 + Number(m[2] || 0) * 60 + Number(m[3] || 0) : Number(value || 0); }
 function clock(value) { const seconds = Math.round(Number(value || 0)); return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`; }

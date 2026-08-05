@@ -10,17 +10,18 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
+from transcript import build_transcript_markdown
+
 try:
     import sc2reader
 except ImportError as exc:
     raise SystemExit("Missing dependencies. Run: python -m pip install -r requirements.txt") from exc
 
-SCHEMA_VERSION = "0.1.0"
+SCHEMA_VERSION = "0.2.0"
 GAME_LOOPS_PER_SECOND = 16.0
 
 
 def json_safe(value: Any) -> Any:
-    """Recursively convert replay objects into deterministic JSON values."""
     if value is None or isinstance(value, (str, int, float, bool)):
         return value
     if isinstance(value, dict):
@@ -61,6 +62,35 @@ def normalize_entity_name(value: Any) -> str:
 def safe_name(obj: Any) -> str:
     value = getattr(obj, "name", None) or getattr(obj, "title", None) or obj.__class__.__name__
     return normalize_entity_name(value)
+
+
+def point(value: Any) -> dict[str, float] | None:
+    if value is None:
+        return None
+    if isinstance(value, (tuple, list)) and len(value) >= 2:
+        x, y = value[0], value[1]
+    else:
+        x = getattr(value, "x", None)
+        y = getattr(value, "y", None)
+        if x is None or y is None:
+            nested = getattr(value, "location", None)
+            return point(nested) if nested is not value else None
+    if isinstance(x, (int, float)) and isinstance(y, (int, float)):
+        return {"x": round(float(x), 2), "y": round(float(y), 2)}
+    return None
+
+
+def event_position(event: Any) -> dict[str, float] | None:
+    return point(getattr(event, "location", None)) or point(getattr(getattr(event, "unit", None), "location", None))
+
+
+def command_target_position(event: Any) -> dict[str, float] | None:
+    for attr in ("location", "target", "target_point"):
+        result = point(getattr(event, attr, None))
+        if result:
+            return result
+    target_unit = getattr(event, "target_unit", None)
+    return point(getattr(target_unit, "location", None))
 
 
 @dataclass
@@ -141,6 +171,7 @@ def analyze(path: Path, focus: str | None) -> dict[str, Any]:
         if report:
             report.events[kind] += 1
         event_time = seconds_from_frame(getattr(event, "frame", 0))
+        base = {"time": event_time, "clock": clock(event_time), "player": report.name if report else pid, "event": kind}
 
         if kind in {"UnitBornEvent", "UnitInitEvent", "UnitDoneEvent"}:
             name = unit_name(event)
@@ -148,7 +179,7 @@ def analyze(path: Path, focus: str | None) -> dict[str, Any]:
                 report.units_born[name] += 1
                 if kind in {"UnitInitEvent", "UnitDoneEvent"}:
                     report.structures_built.append({"time": event_time, "clock": clock(event_time), "name": name, "event": kind})
-            timeline.append({"time": event_time, "clock": clock(event_time), "player": report.name if report else pid, "event": kind, "unit": name})
+            timeline.append({**base, "unit": name, "position": event_position(event)})
         elif kind == "UnitDiedEvent":
             name = unit_name(event)
             victim_owner = getattr(getattr(event, "unit", None), "owner", None)
@@ -157,23 +188,27 @@ def analyze(path: Path, focus: str | None) -> dict[str, Any]:
             if victim:
                 victim.units_died[name] += 1
             killer_pid = getattr(event, "killing_player_id", None)
-            timeline.append({
-                "time": event_time,
-                "clock": clock(event_time),
-                "player": players.get(killer_pid).name if killer_pid in players else killer_pid,
-                "event": kind,
-                "unit": name,
-                "victim": victim.name if victim else victim_pid,
-            })
+            killer = players.get(killer_pid).name if killer_pid in players else killer_pid
+            timeline.append({**base, "player": killer, "killer": killer, "unit": name,
+                             "victim": victim.name if victim else victim_pid, "position": event_position(event)})
         elif kind == "UpgradeCompleteEvent":
             upgrade = str(getattr(event, "upgrade_type_name", None) or getattr(event, "upgrade_type", "Unknown"))
             if report:
                 report.upgrades.append({"time": event_time, "clock": clock(event_time), "name": upgrade})
-            timeline.append({"time": event_time, "clock": clock(event_time), "player": report.name if report else pid, "event": kind, "upgrade": upgrade})
+            timeline.append({**base, "upgrade": upgrade})
         elif kind in {"CommandEvent", "BasicCommandEvent", "TargetPointCommandEvent", "TargetUnitCommandEvent"}:
             ability = getattr(event, "ability_name", None) or safe_name(getattr(event, "ability", None))
+            target_unit = getattr(event, "target_unit", None)
+            command = {
+                "time": event_time,
+                "clock": clock(event_time),
+                "ability": str(ability),
+                "target_position": command_target_position(event),
+                "target_unit": safe_name(target_unit) if target_unit is not None else None,
+            }
             if report:
-                report.commands.append({"time": event_time, "clock": clock(event_time), "ability": str(ability)})
+                report.commands.append(command)
+            timeline.append({**base, **command})
         elif kind == "PlayerStatsEvent" and report:
             fields: dict[str, Any] = {}
             for key in (
@@ -198,7 +233,7 @@ def analyze(path: Path, focus: str | None) -> dict[str, Any]:
     game_seconds = seconds_from_frame(getattr(replay, "frames", 0))
     real_length = getattr(replay, "real_length", None)
 
-    return {
+    data = {
         "schema_version": SCHEMA_VERSION,
         "source": str(path),
         "replay": {
@@ -220,6 +255,8 @@ def analyze(path: Path, focus: str | None) -> dict[str, Any]:
         "event_counts": dict(global_counts),
         "timeline": sorted(timeline, key=lambda item: item["time"]),
     }
+    data["transcript_markdown"] = build_transcript_markdown(data)
+    return data
 
 
 def write_markdown(data: dict[str, Any], path: Path) -> None:
@@ -258,10 +295,13 @@ def main() -> int:
     data = analyze(args.replay, args.player)
     json_path = args.out / "replay_analysis.json"
     md_path = args.out / "replay_analysis.md"
+    transcript_path = args.out / "replay_transcript.md"
     json_path.write_text(json.dumps(json_safe(data), ensure_ascii=False, indent=2), encoding="utf-8")
     write_markdown(data, md_path)
+    transcript_path.write_text(data["transcript_markdown"], encoding="utf-8")
     print(json_path)
     print(md_path)
+    print(transcript_path)
     return 0
 
 
