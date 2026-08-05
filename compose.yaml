@@ -1,6 +1,12 @@
 services:
   sc2-coach:
-    build: .
+    build:
+      context: .
+      args:
+        APP_VERSION: "${APP_VERSION:-0.7.0-SNAPSHOT}"
+        BUILD_NUMBER: "${BUILD_NUMBER:-local}"
+        BUILD_TIME: "${BUILD_TIME:-unknown}"
+        GIT_COMMIT: "${GIT_COMMIT:-unknown}"
     image: sc2-coach-ai:local
     restart: unless-stopped
     ports:
