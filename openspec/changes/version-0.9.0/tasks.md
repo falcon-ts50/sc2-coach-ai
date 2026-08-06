@@ -67,18 +67,7 @@
 - [ ] Make timeline selection update the selected evidence episode.
 - [ ] Provide filtering without changing backend analytical meaning.
 
-## 10. Validation
-
-- [ ] Run all backend tests.
-- [ ] Run all frontend tests and production build.
-- [ ] Run OpenSpec structural validation.
-- [ ] Validate REST, React, Markdown and support-bundle parity.
-- [ ] Validate the unchanged fixed benchmark support bundle.
-- [ ] Perform desktop visual acceptance at representative wide resolutions.
-- [ ] Perform mobile visual acceptance down to 320 CSS pixels.
-- [ ] Confirm that official result, strategic state, kill credit and spatial evidence are not overstated.
-
-## 11. Documentation and delivery
+## 10. Documentation and delivery
 
 - [ ] Update `docs/PROJECT_STATE.md` after implementation.
 - [ ] Update `docs/DECISIONS.md` if Evidence Episode or dashboard ownership becomes a durable architectural decision.
