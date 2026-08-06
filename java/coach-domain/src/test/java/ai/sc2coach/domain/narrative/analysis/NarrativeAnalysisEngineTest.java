@@ -193,6 +193,24 @@ class NarrativeAnalysisEngineTest {
         });
     }
 
+    @Test
+    void exposesDashboardMetricsAndEvidenceEpisodesForAbReport() {
+        NarrativeAnalysis analysis = engine.analyze(noisyLongInputWithShortCombats());
+
+        assertThat(analysis.dashboard().schemaVersion()).isEqualTo("narrative-dashboard.v1");
+        assertThat(analysis.dashboard().summaryMetrics()).extracting(NarrativeDashboard.SummaryMetric::id)
+                .contains("officialResult", "duration", "maxArmyValue", "largestCombat", "strongestSwing");
+        assertThat(analysis.dashboard().evidenceEpisodes()).hasSameSizeAs(analysis.matchFlow().intervals());
+        assertThat(analysis.dashboard().evidenceEpisodes()).allSatisfy(episode -> {
+            assertThat(episode.relatedMatchFlowIntervalIds()).hasSize(1);
+            assertThat(episode.summary()).doesNotContain("фактический");
+        });
+        assertThat(analysis.dashboard().evidenceEpisodes()).anySatisfy(episode -> {
+            assertThat(episode.relatedCombatIds()).contains("combat-short-1");
+            assertThat(episode.metricDeltas()).isNotEmpty();
+        });
+    }
+
     private NarrativeAnalysisInput input() {
         Match match = new Match("Test Map", "2v2", Duration.ofMinutes(20), List.of("dragonDriver", "Lulu"),
                 List.of(player(1, "Frontdoor", 1, "Loss"), player(2, "Guardian", 1, "Loss"),
