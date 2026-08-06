@@ -99,9 +99,9 @@ public final class NarrativeAnalysisEngine {
                 evidence,
                 matchFlow,
                 List.of(
-                        "Narrative Analysis consumes existing deterministic engines and does not infer a strategic result.",
-                        "Replay data does not prove intent or causality; causal links use cautious precedence/contribution language.",
-                        "The chart uses match-context army value, economy proxy and supply series; full bases/production queues are not complete in V1."
+                        "Narrative Analysis использует существующие детерминированные движки и не выводит стратегический результат.",
+                        "Данные реплея не доказывают намерение или причинность; причинные связи используют осторожную формулировку порядка и вклада.",
+                        "График использует стоимость армии, экономический прокси и лимит из match context; полные базы, очереди производства и расход банка в V1 недоступны."
                 )
         );
     }
@@ -221,7 +221,7 @@ public final class NarrativeAnalysisEngine {
                     metrics(player),
                     all,
                     0.86,
-                    List.of("Economy is a worker/income proxy from the existing MatchContext, not a full bank-spend model.")
+                    List.of("Экономика здесь — прокси по рабочим и доходу из существующего MatchContext, а не полная модель банка и трат.")
             ));
             index++;
         }
@@ -281,7 +281,7 @@ public final class NarrativeAnalysisEngine {
                         + " → " + rounded(candidate.after.metrics(), candidate.metric),
                 confidence,
                 List.of(candidate.before.id(), candidate.after.id()),
-                List.of("This transition is deterministic from context snapshots, but threshold labels are configurable heuristics.")
+                List.of("Переход вычислен по context snapshots; пороги и подписи остаются настраиваемой эвристикой.")
         ));
     }
 
@@ -365,7 +365,7 @@ public final class NarrativeAnalysisEngine {
                     List.of(),
                     eventIds(events, start, first.from()),
                     config.phaseConfidence(),
-                    List.of("Opening label is derived from match-context timeline boundaries, not from a complete build-order classifier.")
+                    List.of("Подпись открытия выведена по границам timeline из match context, а не полным классификатором build order.")
             ));
             index++;
         }
@@ -438,7 +438,7 @@ public final class NarrativeAnalysisEngine {
                     ? CausalLink.Kind.RECOVERED_FROM
                     : CausalLink.Kind.PRECEDED;
             String statement = current.kind() == MatchPhase.Kind.STABILIZATION
-                    ? "Стабилизация следует за ранним спадом и может быть восстановлением после него, но replay не доказывает намерение."
+                    ? "Стабилизация следует за ранним спадом и может быть восстановлением после него, но реплей не доказывает намерение."
                     : "Предыдущая фаза предшествует следующей и задаёт контекст, но не доказывает причинность.";
             links.add(new CausalLink(
                     "causal-link-" + (i - 1),
@@ -448,7 +448,7 @@ public final class NarrativeAnalysisEngine {
                     statement,
                     config.causalLinkConfidence(),
                     List.of(previous.id(), current.id()),
-                    List.of("No intent or hidden-information evidence is available in the replay.")
+                    List.of("В реплее нет evidence для намерения или скрытой информации.")
             ));
         }
         return List.copyOf(links);
@@ -476,7 +476,7 @@ public final class NarrativeAnalysisEngine {
                 ),
                 markers,
                 intervals,
-                List.of("Economy and supply are context proxies; the replay response does not expose full base, queue or bank-spend series.")
+                List.of("Экономика и лимит — context proxies; replay response не содержит полные ряды баз, очередей производства или трат банка.")
         );
     }
 
@@ -552,8 +552,8 @@ public final class NarrativeAnalysisEngine {
                 intervals,
                 combats.stream().map(Combat::id).toList(),
                 List.of(
-                        "Match flow is deterministic from existing Narrative Analysis, Combat History and MatchContext evidence.",
-                        "Development drilldown uses available macro deltas and combat-window unit availability; full production queues, exact research completion times and full vision are not reconstructed."
+                        "Ход матча построен детерминированно по Narrative Analysis, Combat History и MatchContext evidence.",
+                        "Расшифровка развития использует доступные изменения макро-показателей и доступность юнитов в окнах боёв; полные очереди производства, точные времена исследований и полное видение не восстановлены."
                 )
         );
     }
@@ -649,7 +649,7 @@ public final class NarrativeAnalysisEngine {
             ));
         }
         return new IntervalDelta(deltas, partial ? Completeness.PARTIAL : Completeness.COMPLETE,
-                partial ? List.of("Some participant metrics are unavailable for this interval.") : List.of());
+                partial ? List.of("Часть метрик участников недоступна для этого интервала.") : List.of());
     }
 
     private List<String> snapshotIds(List<MatchStateSnapshot> snapshots, Duration from, Duration to,
@@ -744,7 +744,7 @@ public final class NarrativeAnalysisEngine {
                 combatIds.isEmpty() ? List.of("Боёв в этом интервале не обнаружено.") : List.of(),
                 combatEvidence.size() == combatIds.size()
                         ? List.of()
-                        : List.of("Some overlapping combats do not have detailed NarrativeEvidence rows.")
+                        : List.of("У части пересекающихся боёв нет подробных строк NarrativeEvidence.")
         );
         DevelopmentDrilldown development = developmentDrilldown(from, to, overlappingCombats, startMetrics, endMetrics, delta, snapshotIds);
         List<String> limitations = new ArrayList<>();
@@ -770,7 +770,7 @@ public final class NarrativeAnalysisEngine {
                 ? List.of()
                 : List.of("Экономических, производственных, технологических или разведывательных событий в этом интервале не обнаружено.");
         List<String> limitations = new ArrayList<>();
-        limitations.add("Full production queues, exact research completion times and full vision are not available in the current replay response.");
+        limitations.add("Полные очереди производства, точные времена исследований и полное видение недоступны в текущем replay response.");
         limitations.addAll(macro.limitations());
         limitations.addAll(production.limitations());
         limitations.addAll(tech.limitations());
@@ -793,7 +793,7 @@ public final class NarrativeAnalysisEngine {
         addMetric(metrics, "supplyUsed", start.supplyUsed(), end.supplyUsed(), focus.supplyUsedDelta());
         if (metrics.isEmpty()) return MacroEvidence.empty();
         return new MacroEvidence(
-                "Macro context changed during this interval.",
+                "Макро-контекст изменился в этом интервале.",
                 metrics,
                 delta.completeness(),
                 snapshotIds,
@@ -811,13 +811,13 @@ public final class NarrativeAnalysisEngine {
         for (Combat combat : overlappingCombats) {
             for (Combat.Participant participant : combat.participants()) {
                 if (participant.additions().isEmpty()) continue;
-                observations.add(participant.player() + ": new combat units became available during the interval: "
+                observations.add(participant.player() + ": новые боевые юниты стали доступны в интервале: "
                         + composition(participant.additions()) + ".");
             }
         }
         return new ProductionEvidence(observations, observations.isEmpty()
                 ? List.of()
-                : List.of("Combat additions preserve ADR-012 semantics: units became available during the interval; local participation is not asserted."));
+                : List.of("Боевые пополнения сохраняют смысл ADR-012: юниты стали доступны в интервале; локальное участие в конкретной точке боя не утверждается."));
     }
 
     private TechEvidence techEvidence(List<Combat> overlappingCombats) {
@@ -825,18 +825,18 @@ public final class NarrativeAnalysisEngine {
         for (Combat combat : overlappingCombats) {
             for (Combat.Participant participant : combat.participants()) {
                 if (!participant.upgrades().isEmpty()) {
-                    observations.add(participant.player() + ": observed upgrades in combat snapshot: "
+                    observations.add(participant.player() + ": апгрейды, видимые в снимке боя: "
                             + String.join(", ", participant.upgrades()) + ".");
                 }
                 if (!participant.technologies().isEmpty()) {
-                    observations.add(participant.player() + ": observed technologies in combat snapshot: "
+                    observations.add(participant.player() + ": технологии, видимые в снимке боя: "
                             + String.join(", ", participant.technologies()) + ".");
                 }
             }
         }
         return new TechEvidence(observations, observations.isEmpty()
                 ? List.of()
-                : List.of("Observed upgrades/technologies describe snapshot state; they do not prove exact research timing inside the interval."));
+                : List.of("Видимые апгрейды/технологии описывают состояние снимка; они не доказывают точный момент исследования внутри интервала."));
     }
 
     private PreparationEvidence preparationEvidence(List<Combat> overlappingCombats, IntervalDelta delta) {
@@ -844,8 +844,8 @@ public final class NarrativeAnalysisEngine {
         double army = focusDelta(delta, Metric.ARMY);
         if (army <= 1) return PreparationEvidence.empty();
         return new PreparationEvidence(
-                List.of("Army value increased without detected combat, consistent with buildup or preparation."),
-                List.of("Preparation is inferred from observed metric deltas, not from hidden intent.")
+                List.of("Стоимость армии выросла без обнаруженного боя; это похоже на набор армии или подготовку."),
+                List.of("Подготовка выведена из видимых изменений метрик, а не из скрытого намерения.")
         );
     }
 
@@ -916,8 +916,8 @@ public final class NarrativeAnalysisEngine {
                 evidenceFocuses(phases, events),
                 combatEvidence(combats, participants, focus),
                 List.of(
-                        "Kill credit is unavailable in this evidence model until the decoder/domain exposes stable killer-unit identity.",
-                        "Additions preserve ADR-012 semantics: units became available during the interval; local participation is not asserted without spatial evidence."
+                        "Убийства по юнитам недоступны в этой evidence model, пока decoder/domain не отдаёт стабильный killer-unit identity.",
+                        "Пополнения сохраняют смысл ADR-012: юниты стали доступны в интервале; локальное участие не утверждается без пространственных evidence."
                 )
         );
     }
@@ -1079,7 +1079,7 @@ public final class NarrativeAnalysisEngine {
                     combat.endedAt(),
                     completeness,
                     sides,
-                    List.of("Credited kills are marked unknown because current Combat evidence does not expose killer-unit identity.")
+                    List.of("Убийства по юнитам отмечены как неизвестные, потому что текущий Combat evidence не содержит killer-unit identity.")
             ));
             index++;
         }
@@ -1132,7 +1132,7 @@ public final class NarrativeAnalysisEngine {
                     count(participant.additions(), unit),
                     count(participant.unitsLost(), unit),
                     count(participant.armyAfter(), unit),
-                    CountEvidence.unknown("Killer-unit identity is not available in current replay combat evidence; unknown is not zero."),
+                    CountEvidence.unknown("Killer-unit identity недоступен в текущем combat evidence; неизвестно не равно нулю."),
                     exact ? Completeness.COMPLETE : Completeness.PARTIAL,
                     exact ? "EXACT" : "PARTIAL"
             ));
@@ -1190,7 +1190,7 @@ public final class NarrativeAnalysisEngine {
                 }
             }
             rows.add(new UnitEvidenceRow(unit, start, additions, losses, end,
-                    CountEvidence.unknown("Team-level credited kills are unavailable without killer-unit attribution."),
+                    CountEvidence.unknown("Командные убийства недоступны без attribution по killer-unit."),
                     partial ? Completeness.PARTIAL : Completeness.COMPLETE,
                     partial ? "PARTIAL" : "EXACT"));
         }
@@ -1228,15 +1228,15 @@ public final class NarrativeAnalysisEngine {
                 .map(name -> ", союзник: " + name)
                 .orElse("");
         String verdict = "Официальный результат реплея для " + focus.name() + ": " + officialResult(focus)
-                + teamText + ". Narrative Analysis показывает фазы матча и контекст переходов; strategic result не вычисляется.";
+                + teamText + ". Narrative Analysis показывает фазы матча и контекст переходов; стратегический результат не вычисляется.";
         List<String> points = new ArrayList<>();
         phases.stream().limit(4).forEach(phase -> points.add(phase.title() + " " + clock(phase.startedAt()) + "–" + clock(phase.endedAt())));
-        points.add("Strategic result: NOT_EVALUATED");
+        points.add("Стратегический результат: не оценивался");
         return new NarrativeSummary(
                 verdict,
                 "NOT_EVALUATED",
                 points,
-                List.of("Causal chain uses cautious links such as preceded/recovered-from; it does not assert mandatory winners or trade efficiency.")
+                List.of("Сценарная цепочка использует осторожные связи вроде предшествования или восстановления; она не утверждает обязательных победителей или эффективность разменов.")
         );
     }
 

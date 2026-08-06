@@ -121,7 +121,7 @@ function NarrativeAnalysisSection({ narrative }) {
       <time>{clock(durationSeconds(interval.startedAt))}–{clock(durationSeconds(interval.endedAt))}</time>
       <strong>{interval.title}</strong>
       <span>{interval.summary}</span>
-      <small>{kindText(interval.kind)} · {interval.completeness || '—'} · {Math.round((interval.confidence || 0) * 100)}%</small>
+      <small>{kindText(interval.kind)} · {completenessText(interval.completeness)} · {Math.round((interval.confidence || 0) * 100)}%</small>
     </button>;
     })}</div>
     <div className="evidence-legend">{participants.map((participant, index) => <span className={`legend-item ${participant.relationship?.toLowerCase() || 'unknown'}`} key={participant.id}><i style={{ background: participantColor(index) }} />{participant.displayName}<small>{relationshipText(participant)}</small></span>)}</div>
@@ -190,7 +190,7 @@ function MetricComparisonChart({ metric, participants, focuses, selected, hoverA
   };
 
   return <section className="chart-card">
-    <header className="chart-title"><h3>{metric.label}</h3><span>{metric.unit || ''} · {metric.completeness || '—'}</span></header>
+    <header className="chart-title"><h3>{metric.label}</h3><span>{metric.unit || ''} · {completenessText(metric.completeness)}</span></header>
     <div className="chart-scroll">
       <svg className="narrative-chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`${metric.label} по времени матча`} onPointerMove={pointerMove} onPointerLeave={() => onHover(null)}>
         {selected && <rect className="phase-band active" x={Math.min(focusFrom, focusTo)} y={top} width={Math.max(2, Math.abs(focusTo - focusFrom))} height={plotHeight} />}
@@ -285,7 +285,7 @@ function CombatBlock({ combat, evidence, index }) {
         <dt>Боевые потери</dt><dd>{composition(player.unitsLost)}</dd>
         <dt>Рабочие</dt><dd>{composition(player.workersLost)}</dd>
         <dt>Здания</dt><dd>{composition(player.structuresLost)}</dd>
-        <dt>Оборона</dt><dd>{composition(player.staticDefenseLost)}</dd>
+        {hasValues(player.staticDefenseLost) && <><dt>Потери статичной обороны</dt><dd>{composition(player.staticDefenseLost)}</dd></>}
         <dt>Армия в конце</dt><dd>{composition(player.armyAfter)}</dd>
         <dt>Стоимость армии</dt><dd>{Math.round(player.armyValueBefore || 0)} → {Math.round(player.armyValueAfter || 0)}</dd>
         <dt>Сверка</dt><dd>{reconciliationText(player)}</dd>
@@ -297,16 +297,16 @@ function CombatBlock({ combat, evidence, index }) {
 function CombatEvidenceTable({ evidence }) {
   return <div className="combat-evidence">
     {(evidence.sides || []).map(side => <section className="combat-side" key={side.id}>
-      <h4>{side.label} <small>{side.completeness || '—'}</small></h4>
+      <h4>{side.label} <small>{completenessText(side.completeness)}</small></h4>
       <UnitEvidenceTable rows={side.totalRows || []} caption="Итого по стороне" />
       {(side.participants || []).map(participant => <div className="participant-evidence" key={participant.participantId}>
-        <h5>{participant.player} <small>{participant.reconciliationStatus || '—'}</small></h5>
+        <h5>{participant.player} <small>{reconciliationStatusText(participant.reconciliationStatus)}</small></h5>
         <UnitEvidenceTable rows={participant.rows || []} caption="Боевые юниты" />
-        <dl className="collateral-losses">
-          <dt>Рабочие</dt><dd>{composition(participant.workerLosses)}</dd>
-          <dt>Здания</dt><dd>{composition(participant.structureLosses)}</dd>
-          <dt>Оборона</dt><dd>{composition(participant.staticDefenseLosses)}</dd>
-        </dl>
+        {hasAnyValues(participant.workerLosses, participant.structureLosses, participant.staticDefenseLosses) && <dl className="collateral-losses">
+          {hasValues(participant.workerLosses) && <><dt>Рабочие</dt><dd>{composition(participant.workerLosses)}</dd></>}
+          {hasValues(participant.structureLosses) && <><dt>Здания</dt><dd>{composition(participant.structureLosses)}</dd></>}
+          {hasValues(participant.staticDefenseLosses) && <><dt>Статичная оборона</dt><dd>{composition(participant.staticDefenseLosses)}</dd></>}
+        </dl>}
       </div>)}
     </section>)}
     {(evidence.notes || []).length > 0 && <p className="evidence-note">{evidence.notes.join(' ')}</p>}
@@ -318,9 +318,9 @@ function UnitEvidenceTable({ rows, caption }) {
   return <div className="unit-table-wrap" role="region" aria-label={caption}>
     <table className="unit-evidence-table">
       <caption>{caption}</caption>
-      <thead><tr><th>Юнит</th><th>Старт</th><th>Новые</th><th>Потери</th><th>Финиш</th><th>Kills</th></tr></thead>
+      <thead><tr><th>Юнит</th><th>Старт</th><th>Новые</th><th>Потери</th><th>Финиш</th><th>Убийства</th></tr></thead>
       <tbody>{rows.map(row => <tr key={row.unit}>
-        <th scope="row">{row.unit}<small>{row.completeness || '—'}</small></th>
+        <th scope="row">{row.unit}<small>{completenessText(row.completeness)}</small></th>
         <td>{row.startCount}</td>
         <td>{row.additions}</td>
         <td>{row.losses}</td>
@@ -421,6 +421,30 @@ function metricText(metric) {
 function formatDelta(value) {
   const rounded = Math.round(Number(value || 0));
   return rounded > 0 ? `+${rounded}` : String(rounded);
+}
+
+function completenessText(value) {
+  return {
+    COMPLETE: 'данные полные',
+    PARTIAL: 'частичные данные',
+    UNAVAILABLE: 'нет данных',
+  }[value] || 'статус неизвестен';
+}
+
+function reconciliationStatusText(value) {
+  return {
+    EXACT: 'сверка точная',
+    PARTIAL: 'сверка частичная',
+    UNKNOWN: 'сверка неизвестна',
+  }[value] || completenessText(value);
+}
+
+function hasValues(map) {
+  return Object.values(map || {}).some(value => Number(value || 0) > 0);
+}
+
+function hasAnyValues(...maps) {
+  return maps.some(hasValues);
 }
 
 function kindText(kind) {
