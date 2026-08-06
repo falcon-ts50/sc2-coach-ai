@@ -39,6 +39,8 @@
 - [x] Serialize start/end metrics and deltas by `NarrativeEvidence.ParticipantIdentity` ID.
 - [x] Add domain tests for no-gap coverage, low-evidence fallback and boundary normalization.
   - Evidence: `MatchFlow.java`, `NarrativeAnalysisEngine.matchFlow(...)`, `NarrativeAnalysisEngineTest.emitsContinuousMatchFlowWithoutTemporalGaps`.
+- [x] Replace raw event-boundary slicing with coarse episode segmentation using smoothed all-participant metric features.
+  - Evidence: `NarrativeAnalysisEngine.coarseEpisodeBoundaries(...)` uses smoothed level/slope/integral features and dynamic-programming piecewise-linear cost, with 4-6 target episodes and minimum readable duration constraints.
 
 ## 3. Non-combat classification
 
@@ -88,12 +90,15 @@
 
 ## 7. Combat evidence redesign
 
-- [ ] Prototype a row-based `start / additions / losses / end / kills` combat table.
-- [ ] Show side/team total before participant detail.
-- [ ] Keep participant attribution visible under each side.
-- [ ] Keep worker, structure and static-defence losses separate.
-- [ ] Preserve reconciliation and unknown kill-credit semantics.
-- [ ] Discuss and finalize the visual shape before APPLY if the prototype is not obviously good.
+- [x] Prototype a row-based `start / additions / losses / end / kills` combat table.
+- [x] Show side/team total before participant detail.
+- [x] Keep participant attribution visible under each side.
+- [x] Keep worker, structure and static-defence losses separate.
+- [x] Preserve reconciliation and unknown kill-credit semantics.
+- [x] Hide kill columns in user-facing tables when every row has unavailable kill attribution.
+- [x] Move combat evidence tables out of global combat history and into selected interval drilldown.
+- [x] Hide participant-card row types such as upgrades when every participant has no value for that row type.
+- [x] Add human-readable combat summary text to selected interval drilldown.
 
 ## 8. Markdown and support-bundle parity
 

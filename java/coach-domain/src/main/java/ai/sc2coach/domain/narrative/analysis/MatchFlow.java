@@ -142,17 +142,19 @@ public record MatchFlow(
             List<String> combatIds,
             List<CombatEvidence> combats,
             List<String> emptyStates,
-            List<String> limitations
+            List<String> limitations,
+            String summary
     ) {
         public CombatDrilldown {
             combatIds = combatIds == null ? List.of() : List.copyOf(combatIds);
             combats = combats == null ? List.of() : List.copyOf(combats);
             emptyStates = emptyStates == null ? List.of() : List.copyOf(emptyStates);
             limitations = limitations == null ? List.of() : List.copyOf(limitations);
+            summary = summary == null ? "" : summary;
         }
 
         public static CombatDrilldown empty() {
-            return new CombatDrilldown(List.of(), List.of(), List.of("No detected combats occurred in this interval."), List.of());
+            return new CombatDrilldown(List.of(), List.of(), List.of("No detected combats occurred in this interval."), List.of(), "");
         }
     }
 

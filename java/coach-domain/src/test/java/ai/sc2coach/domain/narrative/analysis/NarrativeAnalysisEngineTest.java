@@ -177,6 +177,22 @@ class NarrativeAnalysisEngineTest {
                 .contains("Экономических, производственных, технологических или разведывательных событий в этом интервале не обнаружено.");
     }
 
+    @Test
+    void emitsCoarseHumanReadableEpisodesInsteadOfShortCombatSlices() {
+        NarrativeAnalysis analysis = engine.analyze(noisyLongInputWithShortCombats());
+
+        MatchFlow matchFlow = analysis.matchFlow();
+
+        assertThat(matchFlow.intervals()).hasSizeBetween(4, 6);
+        assertThat(matchFlow.intervals()).allSatisfy(interval ->
+                assertThat(interval.endedAt().minus(interval.startedAt())).isGreaterThanOrEqualTo(Duration.ofSeconds(60))
+        );
+        assertThat(matchFlow.intervals()).anySatisfy(interval -> {
+            assertThat(interval.combatIds()).contains("combat-short-1");
+            assertThat(interval.drilldown().combat().summary()).contains("Frontdoor атакует dragonDriver");
+        });
+    }
+
     private NarrativeAnalysisInput input() {
         Match match = new Match("Test Map", "2v2", Duration.ofMinutes(20), List.of("dragonDriver", "Lulu"),
                 List.of(player(1, "Frontdoor", 1, "Loss"), player(2, "Guardian", 1, "Loss"),
@@ -254,6 +270,57 @@ class NarrativeAnalysisEngineTest {
                 quietFrame(600)
         ), MatchContext.MatchSummary.empty());
         return new NarrativeAnalysisInput(match, "dragonDriver", context, List.of(), List.of(), List.of(), null, List.of());
+    }
+
+    private NarrativeAnalysisInput noisyLongInputWithShortCombats() {
+        Match match = new Match("Test Map", "2v2", Duration.ofMinutes(24), List.of("dragonDriver", "Lulu"),
+                List.of(player(1, "Frontdoor", 1, "Loss"), player(2, "Guardian", 1, "Loss"),
+                        player(3, "dragonDriver", 2, "Win"), player(4, "Lulu", 2, "Win")));
+        List<MatchContext.ContextFrame> frames = new java.util.ArrayList<>();
+        for (int second = 0; second <= 1440; second += 120) {
+            double wave = Math.sin(second / 160.0) * 120;
+            frames.add(frame(second, 300 + second * 0.8 + wave, 500 + second * 0.5 - wave, 20 + second / 30.0, second / 50.0));
+        }
+        MatchContext context = new MatchContext(frames, MatchContext.MatchSummary.empty());
+        Combat.Participant dragon = new Combat.Participant(
+                "dragonDriver",
+                Map.of("Marine", 8, "Thor", 1),
+                Map.of("Viking", 2),
+                Map.of("Marine", 6, "Thor", 1, "Viking", 2),
+                Map.of("Marine", 2),
+                Map.of(),
+                Map.of(),
+                Map.of(),
+                List.of(),
+                List.of(),
+                650,
+                750,
+                Combat.ReconciliationStatus.EXACT,
+                List.of()
+        );
+        Combat.Participant frontdoor = new Combat.Participant(
+                "Frontdoor",
+                Map.of("Battlecruiser", 3),
+                Map.of("Battlecruiser", 4),
+                Map.of("Battlecruiser", 7),
+                Map.of(),
+                Map.of(),
+                Map.of(),
+                Map.of(),
+                List.of("BattlecruiserEnableSpecializations"),
+                List.of(),
+                1200,
+                2800,
+                Combat.ReconciliationStatus.EXACT,
+                List.of()
+        );
+        List<Combat> combats = List.of(
+                new Combat(Duration.ofSeconds(612), Duration.ofSeconds(622), "Frontdoor", "dragonDriver", null,
+                        List.of(dragon, frontdoor), "110,92", 0.82, "combat-short-1", "Бой 1"),
+                new Combat(Duration.ofSeconds(660), Duration.ofSeconds(668), "Frontdoor", "dragonDriver", null,
+                        List.of(dragon, frontdoor), "110,92", 0.82, "combat-short-2", "Бой 2")
+        );
+        return new NarrativeAnalysisInput(match, "dragonDriver", context, List.of(), List.of(), combats, null, List.of());
     }
 
     private MatchContext context() {

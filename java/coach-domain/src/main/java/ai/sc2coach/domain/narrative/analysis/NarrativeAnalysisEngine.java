@@ -40,6 +40,7 @@ import ai.sc2coach.domain.narrative.analysis.NarrativeEvidence.UnitEvidenceRow;
 
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -488,17 +489,7 @@ public final class NarrativeAnalysisEngine {
         Duration end = matchEnd(match, snapshots, combats);
         if (end.compareTo(start) <= 0) return MatchFlow.empty();
 
-        TreeSet<Duration> boundaries = new TreeSet<>();
-        boundaries.add(start);
-        boundaries.add(end);
-        phases.forEach(phase -> {
-            addMatchFlowBoundary(boundaries, phase.startedAt(), start, end);
-            addMatchFlowBoundary(boundaries, phase.endedAt(), start, end);
-        });
-        combats.forEach(combat -> {
-            addMatchFlowBoundary(boundaries, combat.startedAt(), start, end);
-            addMatchFlowBoundary(boundaries, combat.endedAt(), start, end);
-        });
+        TreeSet<Duration> boundaries = coarseEpisodeBoundaries(snapshots, evidence.participants(), start, end);
 
         Map<String, CombatEvidence> combatEvidenceById = evidence.combats().stream()
                 .collect(Collectors.toMap(CombatEvidence::id, item -> item, (left, right) -> left, LinkedHashMap::new));
@@ -552,10 +543,220 @@ public final class NarrativeAnalysisEngine {
                 intervals,
                 combats.stream().map(Combat::id).toList(),
                 List.of(
-                        "Ход матча построен детерминированно по Narrative Analysis, Combat History и MatchContext evidence.",
+                        "Ход матча построен как человекочитаемые крупные эпизоды по сглаженным многомерным рядам MatchContext; короткие бои и микрособытия становятся evidence внутри эпизода, а не отдельными карточками.",
                         "Расшифровка развития использует доступные изменения макро-показателей и доступность юнитов в окнах боёв; полные очереди производства, точные времена исследований и полное видение не восстановлены."
                 )
         );
+    }
+
+    private TreeSet<Duration> coarseEpisodeBoundaries(List<MatchStateSnapshot> snapshots,
+                                                       List<ParticipantIdentity> participants,
+                                                       Duration start,
+                                                       Duration end) {
+        TreeSet<Duration> boundaries = new TreeSet<>();
+        boundaries.add(start);
+        boundaries.add(end);
+        if (snapshots.size() < 5 || end.minus(start).compareTo(Duration.ofSeconds(240)) < 0) {
+            return boundaries;
+        }
+
+        List<FeatureSample> samples = featureSamples(snapshots, participants);
+        if (samples.size() < 5) return boundaries;
+
+        int targetEpisodes = targetEpisodeCount(end.minus(start));
+        double minEpisodeSeconds = end.minus(start).compareTo(Duration.ofMinutes(15)) >= 0 ? 60 : 45;
+        targetEpisodes = Math.min(targetEpisodes, Math.max(1, (int) Math.floor(secondsBetween(start, end) / minEpisodeSeconds)));
+        if (targetEpisodes <= 1) return boundaries;
+
+        List<Integer> breakpoints = optimalEpisodeBreakpoints(samples, targetEpisodes, minEpisodeSeconds);
+        for (Integer index : breakpoints) {
+            if (index == null || index <= 0 || index >= samples.size() - 1) continue;
+            addMatchFlowBoundary(boundaries, samples.get(index).at(), start, end);
+        }
+        return boundaries;
+    }
+
+    private int targetEpisodeCount(Duration duration) {
+        long seconds = duration.toSeconds();
+        if (seconds < 600) return 4;
+        if (seconds < 1200) return 5;
+        return 6;
+    }
+
+    private List<FeatureSample> featureSamples(List<MatchStateSnapshot> snapshots, List<ParticipantIdentity> participants) {
+        List<String> names = participants.stream().map(ParticipantIdentity::displayName).toList();
+        List<double[]> raw = new ArrayList<>();
+        for (MatchStateSnapshot snapshot : snapshots) {
+            double[] vector = new double[Math.max(1, names.size()) * 3];
+            int offset = 0;
+            for (String name : names) {
+                MatchStateSnapshot.Metrics metrics = snapshot.playerMetrics().get(name);
+                vector[offset++] = metrics == null ? 0 : metrics.armyValue();
+                vector[offset++] = metrics == null ? 0 : metrics.economyProxy();
+                vector[offset++] = metrics == null ? 0 : metrics.supplyUsed();
+            }
+            raw.add(vector);
+        }
+
+        double[][] smoothed = gaussianSmooth(raw, snapshots, 25.0);
+        double[][] normalized = normalize(smoothed);
+        List<FeatureSample> samples = new ArrayList<>();
+        double[] integral = new double[normalized[0].length];
+        for (int i = 0; i < normalized.length; i++) {
+            double elapsed = i == 0 ? 0 : Math.max(1, secondsBetween(snapshots.get(i - 1).at(), snapshots.get(i).at()));
+            double[] derivative = new double[normalized[i].length];
+            if (i > 0) {
+                for (int d = 0; d < derivative.length; d++) {
+                    derivative[d] = (normalized[i][d] - normalized[i - 1][d]) / elapsed * 30.0;
+                    integral[d] += normalized[i][d] * elapsed / 60.0;
+                }
+            }
+            double[] vector = new double[normalized[i].length * 3];
+            for (int d = 0; d < normalized[i].length; d++) {
+                vector[d] = normalized[i][d];
+                vector[d + normalized[i].length] = derivative[d];
+                vector[d + normalized[i].length * 2] = integral[d];
+            }
+            samples.add(new FeatureSample(snapshots.get(i).at(), vector));
+        }
+        return samples;
+    }
+
+    private double[][] gaussianSmooth(List<double[]> raw, List<MatchStateSnapshot> snapshots, double sigmaSeconds) {
+        int n = raw.size();
+        int dimensions = raw.getFirst().length;
+        double[][] result = new double[n][dimensions];
+        double radius = sigmaSeconds * 2.5;
+        for (int i = 0; i < n; i++) {
+            double weightSum = 0;
+            for (int j = 0; j < n; j++) {
+                double distance = Math.abs(secondsBetween(snapshots.get(i).at(), snapshots.get(j).at()));
+                if (distance > radius) continue;
+                double weight = Math.exp(-(distance * distance) / (2 * sigmaSeconds * sigmaSeconds));
+                weightSum += weight;
+                for (int d = 0; d < dimensions; d++) result[i][d] += raw.get(j)[d] * weight;
+            }
+            if (weightSum > 0) {
+                for (int d = 0; d < dimensions; d++) result[i][d] /= weightSum;
+            }
+        }
+        return result;
+    }
+
+    private double[][] normalize(double[][] values) {
+        int n = values.length;
+        int dimensions = values[0].length;
+        double[] mean = new double[dimensions];
+        double[] variance = new double[dimensions];
+        for (double[] value : values) {
+            for (int d = 0; d < dimensions; d++) mean[d] += value[d];
+        }
+        for (int d = 0; d < dimensions; d++) mean[d] /= n;
+        for (double[] value : values) {
+            for (int d = 0; d < dimensions; d++) {
+                double centered = value[d] - mean[d];
+                variance[d] += centered * centered;
+            }
+        }
+        double[][] normalized = new double[n][dimensions];
+        for (int i = 0; i < n; i++) {
+            for (int d = 0; d < dimensions; d++) {
+                double std = Math.sqrt(variance[d] / Math.max(1, n - 1));
+                normalized[i][d] = std <= 0.000001 ? 0 : (values[i][d] - mean[d]) / std;
+            }
+        }
+        return normalized;
+    }
+
+    private List<Integer> optimalEpisodeBreakpoints(List<FeatureSample> samples, int targetEpisodes, double minEpisodeSeconds) {
+        int n = samples.size();
+        double[][] cost = new double[n][n];
+        for (int i = 0; i < n; i++) {
+            for (int j = i + 1; j < n; j++) {
+                cost[i][j] = segmentLinearCost(samples, i, j);
+            }
+        }
+
+        double[][] dp = new double[targetEpisodes + 1][n];
+        int[][] previous = new int[targetEpisodes + 1][n];
+        for (int k = 0; k <= targetEpisodes; k++) {
+            for (int j = 0; j < n; j++) {
+                dp[k][j] = Double.POSITIVE_INFINITY;
+                previous[k][j] = -1;
+            }
+        }
+        for (int j = 1; j < n; j++) {
+            if (episodeDuration(samples, 0, j) >= minEpisodeSeconds) dp[1][j] = cost[0][j];
+        }
+        for (int k = 2; k <= targetEpisodes; k++) {
+            for (int j = 1; j < n; j++) {
+                if (episodeDuration(samples, 0, j) < minEpisodeSeconds * k) continue;
+                for (int i = 1; i < j; i++) {
+                    if (episodeDuration(samples, i, j) < minEpisodeSeconds || !Double.isFinite(dp[k - 1][i])) continue;
+                    double candidate = dp[k - 1][i] + cost[i][j] + k * 0.15;
+                    if (candidate < dp[k][j]) {
+                        dp[k][j] = candidate;
+                        previous[k][j] = i;
+                    }
+                }
+            }
+        }
+
+        int selectedK = targetEpisodes;
+        while (selectedK > 1 && !Double.isFinite(dp[selectedK][n - 1])) selectedK--;
+        if (selectedK <= 1) return List.of();
+        List<Integer> breakpoints = new ArrayList<>();
+        int cursor = n - 1;
+        for (int k = selectedK; k > 1; k--) {
+            int prev = previous[k][cursor];
+            if (prev <= 0) break;
+            breakpoints.add(prev);
+            cursor = prev;
+        }
+        Collections.reverse(breakpoints);
+        return breakpoints;
+    }
+
+    private double segmentLinearCost(List<FeatureSample> samples, int from, int to) {
+        int count = to - from + 1;
+        if (count <= 2) return 0;
+        int dimensions = samples.getFirst().values().length;
+        double firstSecond = samples.get(from).at().toMillis() / 1000.0;
+        double sumT = 0;
+        double sumTT = 0;
+        for (int i = from; i <= to; i++) {
+            double t = samples.get(i).at().toMillis() / 1000.0 - firstSecond;
+            sumT += t;
+            sumTT += t * t;
+        }
+        double cost = 0;
+        for (int d = 0; d < dimensions; d++) {
+            double sumY = 0;
+            double sumTY = 0;
+            for (int i = from; i <= to; i++) {
+                double t = samples.get(i).at().toMillis() / 1000.0 - firstSecond;
+                double y = samples.get(i).values()[d];
+                sumY += y;
+                sumTY += t * y;
+            }
+            double denominator = count * sumTT - sumT * sumT;
+            double slope = Math.abs(denominator) <= 0.000001 ? 0 : (count * sumTY - sumT * sumY) / denominator;
+            double intercept = (sumY - slope * sumT) / count;
+            for (int i = from; i <= to; i++) {
+                double t = samples.get(i).at().toMillis() / 1000.0 - firstSecond;
+                double error = samples.get(i).values()[d] - (intercept + slope * t);
+                cost += error * error;
+            }
+        }
+        return cost / Math.max(1, count);
+    }
+
+    private double episodeDuration(List<FeatureSample> samples, int from, int to) {
+        return secondsBetween(samples.get(from).at(), samples.get(to).at());
+    }
+
+    private double secondsBetween(Duration from, Duration to) {
+        return (to.toMillis() - from.toMillis()) / 1000.0;
     }
 
     private Duration matchEnd(Match match, List<MatchStateSnapshot> snapshots, List<Combat> combats) {
@@ -744,7 +945,8 @@ public final class NarrativeAnalysisEngine {
                 combatIds.isEmpty() ? List.of("Боёв в этом интервале не обнаружено.") : List.of(),
                 combatEvidence.size() == combatIds.size()
                         ? List.of()
-                        : List.of("У части пересекающихся боёв нет подробных строк NarrativeEvidence.")
+                        : List.of("У части пересекающихся боёв нет подробных строк NarrativeEvidence."),
+                combatNarrative(overlappingCombats)
         );
         DevelopmentDrilldown development = developmentDrilldown(from, to, overlappingCombats, startMetrics, endMetrics, delta, snapshotIds);
         List<String> limitations = new ArrayList<>();
@@ -849,11 +1051,64 @@ public final class NarrativeAnalysisEngine {
         );
     }
 
+    private String combatNarrative(List<Combat> combats) {
+        if (combats.isEmpty()) return "";
+        return combats.stream()
+                .map(this::combatNarrative)
+                .collect(Collectors.joining(" "));
+    }
+
+    private String combatNarrative(Combat combat) {
+        String attacker = combat.initiator() == null || combat.initiator().isBlank() ? "Инициатор" : combat.initiator();
+        String defender = combat.opponent() == null || combat.opponent().isBlank() ? "соперника" : combat.opponent();
+        List<String> parts = new ArrayList<>();
+        parts.add(attacker + " атакует " + defender + ".");
+        String forces = combat.participants().stream()
+                .map(participant -> participant.player() + ": " + compactComposition(participant.armyBefore()))
+                .filter(item -> !item.endsWith(": нет"))
+                .collect(Collectors.joining("; "));
+        if (!forces.isBlank()) parts.add("Состав в начале: " + forces + ".");
+        String additions = combat.participants().stream()
+                .filter(participant -> !participant.additions().isEmpty())
+                .map(participant -> participant.player() + " достроил/получил " + compactComposition(participant.additions()))
+                .collect(Collectors.joining("; "));
+        if (!additions.isBlank()) parts.add("Во время эпизода: " + additions + ".");
+        String losses = combat.participants().stream()
+                .filter(participant -> hasValues(participant.unitsLost()) || hasValues(participant.workersLost())
+                        || hasValues(participant.structuresLost()) || hasValues(participant.staticDefenseLost()))
+                .map(participant -> participant.player() + " потерял " + combatLossSummary(participant))
+                .collect(Collectors.joining("; "));
+        if (!losses.isBlank()) parts.add("Потери: " + losses + ".");
+        return String.join(" ", parts);
+    }
+
+    private String combatLossSummary(Combat.Participant participant) {
+        List<String> losses = new ArrayList<>();
+        if (hasValues(participant.unitsLost())) losses.add(compactComposition(participant.unitsLost()));
+        if (hasValues(participant.workersLost())) losses.add("рабочие: " + compactComposition(participant.workersLost()));
+        if (hasValues(participant.structuresLost())) losses.add("здания: " + compactComposition(participant.structuresLost()));
+        if (hasValues(participant.staticDefenseLost())) losses.add("статичная оборона: " + compactComposition(participant.staticDefenseLost()));
+        return losses.isEmpty() ? "нет подтверждённых потерь" : String.join(", ", losses);
+    }
+
     private String composition(Map<String, Integer> value) {
         return value.entrySet().stream()
                 .sorted(Map.Entry.comparingByKey())
                 .map(entry -> "+" + entry.getValue() + " " + entry.getKey())
                 .collect(Collectors.joining(", "));
+    }
+
+    private String compactComposition(Map<String, Integer> value) {
+        if (!hasValues(value)) return "нет";
+        return value.entrySet().stream()
+                .filter(entry -> entry.getValue() != null && entry.getValue() > 0)
+                .sorted(Map.Entry.comparingByKey())
+                .map(entry -> entry.getValue() + " x " + entry.getKey())
+                .collect(Collectors.joining(", "));
+    }
+
+    private boolean hasValues(Map<String, Integer> value) {
+        return value != null && value.values().stream().anyMatch(count -> count != null && count > 0);
     }
 
     private Completeness intervalCompleteness(Map<String, IntervalMetrics> startMetrics,
@@ -916,7 +1171,6 @@ public final class NarrativeAnalysisEngine {
                 evidenceFocuses(phases, events),
                 combatEvidence(combats, participants, focus),
                 List.of(
-                        "Убийства по юнитам недоступны в этой evidence model, пока decoder/domain не отдаёт стабильный killer-unit identity.",
                         "Пополнения сохраняют смысл ADR-012: юниты стали доступны в интервале; локальное участие не утверждается без пространственных evidence."
                 )
         );
@@ -1079,7 +1333,7 @@ public final class NarrativeAnalysisEngine {
                     combat.endedAt(),
                     completeness,
                     sides,
-                    List.of("Убийства по юнитам отмечены как неизвестные, потому что текущий Combat evidence не содержит killer-unit identity.")
+                    List.of()
             ));
             index++;
         }
@@ -1295,6 +1549,8 @@ public final class NarrativeAnalysisEngine {
             this.id = id;
         }
     }
+
+    private record FeatureSample(Duration at, double[] values) {}
 
     private record Candidate(MatchStateSnapshot before, MatchStateSnapshot after, Metric metric, double delta) {}
 }
