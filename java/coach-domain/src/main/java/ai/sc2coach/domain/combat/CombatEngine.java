@@ -16,21 +16,20 @@ import java.util.stream.Collectors;
 
 public final class CombatEngine {
 
-    private static final double WINDOW_BEFORE_SECONDS = 5;
-    private static final double WINDOW_AFTER_SECONDS = 45;
-    private static final double MIN_ATTACK_GAP_SECONDS = 30;
+    private static final double WINDOW_BEFORE_SECONDS = 15;
+    private static final double DEATH_WINDOW_AFTER_SECONDS = 15;
+    private static final double DEATH_CLUSTER_GAP_SECONDS = 20;
+    private static final double DEATH_CLUSTER_MAX_SECONDS = 75;
+    private static final double DEATH_CLUSTER_MAX_DISTANCE = 35;
+    private static final double SEED_MERGE_GAP_SECONDS = 20;
+    private static final double SEED_MERGE_MAX_SECONDS = 150;
 
     public List<Combat> detect(ReplayAnalysis analysis, String focusPlayer) {
-        List<Combat> detected = analysis.timeline().stream()
-                .filter(this::isAttackCommand)
-                .sorted(Comparator.comparingDouble(event -> value(event.time())))
-                .filter(new SpacedAttackPredicate())
-                .map(event -> buildCombat(analysis, event))
+        List<Combat> detected = combatSeeds(analysis).stream()
+                .map(seed -> buildCombat(analysis, seed))
                 .filter(combat -> combat.participants().size() >= 2)
-                .filter(this::hasObservedCombatLoss)
-                .filter(combat -> focusPlayer == null || focusPlayer.isBlank()
-                        || combat.participants().stream().anyMatch(p -> p.player().equalsIgnoreCase(focusPlayer)))
-                .limit(8)
+                .filter(this::hasObservedLoss)
+                .filter(combat -> isRelevantToFocus(analysis, combat, focusPlayer))
                 .toList();
         var ordered = new ArrayList<Combat>();
         for (int index = 0; index < detected.size(); index++) {
@@ -39,16 +38,132 @@ public final class CombatEngine {
         return List.copyOf(ordered);
     }
 
-    private Combat buildCombat(ReplayAnalysis analysis, ReplayAnalysis.TimelineEvent attack) {
-        double attackTime = value(attack.time());
-        double start = Math.max(0, attackTime - WINDOW_BEFORE_SECONDS);
-        double end = attackTime + WINDOW_AFTER_SECONDS;
-        String initiator = playerName(analysis, attack.player());
-
-        var deaths = analysis.timeline().stream()
-                .filter(this::isDeath)
-                .filter(event -> value(event.time()) >= start && value(event.time()) <= end)
+    private List<CombatSeed> combatSeeds(ReplayAnalysis analysis) {
+        var seeds = new ArrayList<CombatSeed>();
+        addDeathClusterSeeds(analysis, seeds);
+        return mergeSeeds(seeds).stream()
+                .filter(seed -> seed.end() >= seed.start())
+                .sorted(Comparator.comparingDouble(CombatSeed::start).thenComparingDouble(CombatSeed::end))
                 .toList();
+    }
+
+    private void addDeathClusterSeeds(ReplayAnalysis analysis, List<CombatSeed> seeds) {
+        var deaths = analysis.timeline().stream()
+                .filter(event -> isMeaningfulDeath(analysis, event))
+                .sorted(Comparator.comparingDouble(event -> value(event.time())))
+                .toList();
+        if (deaths.isEmpty()) return;
+
+        var cluster = new ArrayList<ReplayAnalysis.TimelineEvent>();
+        for (ReplayAnalysis.TimelineEvent death : deaths) {
+            if (!cluster.isEmpty() && !sameDeathCluster(cluster, death)) {
+                addDeathClusterSeed(analysis, seeds, cluster);
+                cluster.clear();
+            }
+            cluster.add(death);
+        }
+        if (!cluster.isEmpty()) addDeathClusterSeed(analysis, seeds, cluster);
+    }
+
+    private void addDeathClusterSeed(
+            ReplayAnalysis analysis,
+            List<CombatSeed> seeds,
+            List<ReplayAnalysis.TimelineEvent> deaths
+    ) {
+        if (isCandidateDeathCluster(analysis, deaths)) {
+            seeds.add(seedForDeathCluster(analysis, deaths));
+        }
+    }
+
+    private CombatSeed seedForDeathCluster(ReplayAnalysis analysis, List<ReplayAnalysis.TimelineEvent> deaths) {
+        double start = Math.max(0, value(deaths.getFirst().time()) - WINDOW_BEFORE_SECONDS);
+        double end = value(deaths.getLast().time()) + DEATH_WINDOW_AFTER_SECONDS;
+        String initiator = deaths.stream()
+                .map(event -> killerName(analysis, event))
+                .filter(Objects::nonNull)
+                .filter(killer -> !killer.equalsIgnoreCase(deathOwnerName(analysis, deaths.getFirst())))
+                .findFirst()
+                .orElseGet(() -> killerName(analysis, deaths.getFirst()));
+        String location = deaths.stream()
+                .map(this::location)
+                .filter(Objects::nonNull)
+                .findFirst()
+                .orElse(null);
+        return new CombatSeed(start, end, initiator, location, List.copyOf(deaths));
+    }
+
+    private boolean isCandidateDeathCluster(ReplayAnalysis analysis, List<ReplayAnalysis.TimelineEvent> deaths) {
+        int combatUnits = 0;
+        int workers = 0;
+        int infrastructure = 0;
+        boolean highValueCombatUnit = false;
+        boolean onlyLowValueSwarm = true;
+        for (ReplayAnalysis.TimelineEvent death : deaths) {
+            String unit = deathUnitName(analysis, death);
+            if (isCombatUnit(unit)) {
+                combatUnits++;
+                highValueCombatUnit |= isHighValueCombatUnit(unit);
+                onlyLowValueSwarm &= isLowValueSwarmUnit(unit);
+            } else if (isWorker(unit)) {
+                workers++;
+            } else if (isStructure(unit) || isStaticDefense(unit)) {
+                infrastructure++;
+            }
+        }
+        return highValueCombatUnit
+                || workers >= 3
+                || infrastructure >= 1
+                || combatUnits >= 8
+                || (combatUnits >= 2 && !onlyLowValueSwarm);
+    }
+
+    private boolean sameDeathCluster(List<ReplayAnalysis.TimelineEvent> cluster, ReplayAnalysis.TimelineEvent death) {
+        double firstTime = value(cluster.getFirst().time());
+        double previousTime = value(cluster.getLast().time());
+        if (value(death.time()) - previousTime > DEATH_CLUSTER_GAP_SECONDS) return false;
+        if (value(death.time()) - firstTime > DEATH_CLUSTER_MAX_SECONDS) return false;
+        Double distance = distance(cluster.getLast(), death);
+        return distance == null || distance <= DEATH_CLUSTER_MAX_DISTANCE;
+    }
+
+    private List<CombatSeed> mergeSeeds(List<CombatSeed> seeds) {
+        if (seeds.isEmpty()) return List.of();
+        var sorted = seeds.stream()
+                .filter(seed -> seed.end() >= seed.start())
+                .sorted(Comparator.comparingDouble(CombatSeed::start).thenComparingDouble(CombatSeed::end))
+                .toList();
+        var merged = new ArrayList<CombatSeed>();
+        CombatSeed current = sorted.getFirst();
+        for (int i = 1; i < sorted.size(); i++) {
+            CombatSeed next = sorted.get(i);
+            double mergedEnd = Math.max(current.end(), next.end());
+            if (next.start() <= current.end() + SEED_MERGE_GAP_SECONDS
+                    && mergedEnd - current.start() <= SEED_MERGE_MAX_SECONDS) {
+                var deaths = new ArrayList<ReplayAnalysis.TimelineEvent>();
+                deaths.addAll(current.deaths());
+                deaths.addAll(next.deaths());
+                current = new CombatSeed(
+                        current.start(),
+                        mergedEnd,
+                        current.initiator() == null ? next.initiator() : current.initiator(),
+                        current.location() == null ? next.location() : current.location(),
+                        List.copyOf(deaths)
+                );
+            } else {
+                merged.add(current);
+                current = next;
+            }
+        }
+        merged.add(current);
+        return List.copyOf(merged);
+    }
+
+    private Combat buildCombat(ReplayAnalysis analysis, CombatSeed seed) {
+        double start = seed.start();
+        double end = seed.end();
+        String initiator = seed.initiator();
+
+        var deaths = seed.deaths();
 
         var participantNames = new ArrayList<String>();
         addDistinct(participantNames, initiator);
@@ -82,7 +197,7 @@ public final class CombatEngine {
                 opponent,
                 winner,
                 participants,
-                location(attack),
+                seed.location(),
                 combatDeaths == 0 ? 0.45 : 0.86
         );
     }
@@ -353,6 +468,19 @@ public final class CombatEngine {
         return unit != null && !unit.isBlank() && !isWorker(unit) && !isStructure(unit) && !isNoise(unit);
     }
 
+    private boolean isHighValueCombatUnit(String unit) {
+        String value = lower(unit);
+        return value.contains("battlecruiser") || value.contains("carrier") || value.contains("mothership")
+                || value.contains("tempest") || value.contains("thor") || value.contains("ultralisk")
+                || value.contains("broodlord") || value.contains("viper") || value.contains("infestor")
+                || value.contains("siegetank") || value.contains("colossus");
+    }
+
+    private boolean isLowValueSwarmUnit(String unit) {
+        String value = lower(unit);
+        return value.contains("zergling") || value.contains("broodling") || value.contains("baneling");
+    }
+
     private boolean isWorker(String unit) {
         String value = lower(unit);
         return value.equals("scv") || value.equals("probe") || value.equals("drone") || value.equals("mule");
@@ -394,8 +522,32 @@ public final class CombatEngine {
                 || value.contains("shield") || value.matches(".*level[123].*");
     }
 
-    private boolean hasObservedCombatLoss(Combat combat) {
-        return combat.participants().stream().anyMatch(participant -> !participant.unitsLost().isEmpty());
+    private boolean hasObservedLoss(Combat combat) {
+        return combat.participants().stream().anyMatch(participant ->
+                !participant.unitsLost().isEmpty()
+                        || !participant.workersLost().isEmpty()
+                        || !participant.structuresLost().isEmpty()
+                        || !participant.staticDefenseLost().isEmpty());
+    }
+
+    private boolean isRelevantToFocus(ReplayAnalysis analysis, Combat combat, String focusPlayer) {
+        if (focusPlayer == null || focusPlayer.isBlank()) return true;
+        Integer focusTeam = teamOf(analysis, focusPlayer);
+        if (focusTeam == null) {
+            return combat.participants().stream().anyMatch(p -> p.player().equalsIgnoreCase(focusPlayer));
+        }
+        return combat.participants().stream().anyMatch(participant -> Objects.equals(teamOf(analysis, participant.player()), focusTeam));
+    }
+
+    private boolean isMeaningfulDeath(ReplayAnalysis analysis, ReplayAnalysis.TimelineEvent event) {
+        if (!isDeath(event)) return false;
+        String unit = deathUnitName(analysis, event);
+        if (unit == null || unit.isBlank() || isNoise(unit)) return false;
+        String owner = deathOwnerName(analysis, event);
+        String killer = killerName(analysis, event);
+        return owner != null && !owner.isBlank()
+                && killer != null && !killer.isBlank()
+                && !owner.equalsIgnoreCase(killer);
     }
 
     private double observedLossScore(Combat.Participant participant) {
@@ -436,6 +588,23 @@ public final class CombatEngine {
         return position == null ? null : String.format(Locale.ROOT, "%.1f, %.1f", position.x(), position.y());
     }
 
+    private Double distance(ReplayAnalysis.TimelineEvent left, ReplayAnalysis.TimelineEvent right) {
+        var leftPosition = position(left);
+        var rightPosition = position(right);
+        if (leftPosition == null || rightPosition == null
+                || leftPosition.x() == null || leftPosition.y() == null
+                || rightPosition.x() == null || rightPosition.y() == null) {
+            return null;
+        }
+        double dx = leftPosition.x() - rightPosition.x();
+        double dy = leftPosition.y() - rightPosition.y();
+        return Math.sqrt(dx * dx + dy * dy);
+    }
+
+    private ReplayAnalysis.Position position(ReplayAnalysis.TimelineEvent event) {
+        return event.targetPosition() != null ? event.targetPosition() : event.position();
+    }
+
     private static String lower(String value) {
         return value == null ? "" : value.toLowerCase(Locale.ROOT);
     }
@@ -444,15 +613,11 @@ public final class CombatEngine {
         return number == null ? 0 : number.doubleValue();
     }
 
-    private static final class SpacedAttackPredicate implements Predicate<ReplayAnalysis.TimelineEvent> {
-        private double previous = -Double.MAX_VALUE;
-
-        @Override
-        public boolean test(ReplayAnalysis.TimelineEvent event) {
-            double current = value(event.time());
-            if (current - previous < MIN_ATTACK_GAP_SECONDS) return false;
-            previous = current;
-            return true;
-        }
-    }
+    private record CombatSeed(
+            double start,
+            double end,
+            String initiator,
+            String location,
+            List<ReplayAnalysis.TimelineEvent> deaths
+    ) {}
 }
