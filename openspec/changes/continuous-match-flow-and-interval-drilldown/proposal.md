@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed — prepare for REVIEW, then APPLY after approval.
+Proposed — REVIEW packet refined with contract and benchmark acceptance expectations; APPLY only after approval.
 
 ## Problem
 
@@ -21,6 +21,16 @@ For StarCraft II analysis this is the wrong centre of gravity. The match is cont
    - economic/tech/production/scouting/preparation evidence for non-combat intervals where data exists.
 5. Keep all-player graph comparisons introduced by `narrative-evidence-visualization`.
 6. Start redesigning combat evidence presentation so army state, additions, losses and end state are easier to compare.
+
+## REVIEW-ready refinements
+
+Before APPLY, this change packet must be treated as owning a concrete backend contract, not only a UI idea:
+
+- `NarrativeAnalysis` gets an additive backend-owned `matchFlow` payload, or an equivalent nested field with the same semantics.
+- `matchFlow.intervals` is a no-gap partition of the match from canonical match start to canonical match end.
+- Each interval has a stable ID, ordinal, kind, title, time bounds, confidence, completeness, evidence references, combat references, metric deltas, drilldown content and limitations.
+- Every selected interval drilldown is serialized by the backend. React stores only selected interval ID/UI state and renders the already-owned facts.
+- The fixed benchmark replay/support bundle for `dragonDriver` must be used to record ACTUAL interval count, interval bounds, category distribution and combat/no-combat drilldown mapping before implementation is considered done.
 
 ## Non-goals
 
@@ -96,6 +106,7 @@ For the fixed benchmark replay and `dragonDriver` perspective:
 7. If the interval contains no detected combats, the drilldown says so and shows available macro/preparation evidence instead.
 8. Combat evidence remains team-aware and participant-attributable.
 9. The UI does not add winner, efficiency, intent, hidden-vision or physical-participation claims.
+10. The previously observed Narrative Analysis phase holes on the fixed artifact, including the 7:10-7:50, 12:40-16:00 and 21:30-match-end ranges, are covered by explicit match-flow intervals rather than disappearing.
 
 ## Rollout
 
