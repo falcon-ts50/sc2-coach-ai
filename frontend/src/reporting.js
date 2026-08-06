@@ -19,14 +19,14 @@ export function buildMarkdown(analysis) {
         `- Армия в начале: ${composition(player.armyBefore)}`,
         `- Новые юниты в интервале: ${composition(player.additions)}`,
         `- Боевые потери: ${composition(player.unitsLost)}`,
-        `- Рабочие: ${composition(player.workersLost)}`,
-        `- Здания: ${composition(player.structuresLost)}`,
-        `- Оборона: ${composition(player.staticDefenseLost)}`,
         `- Армия в конце: ${composition(player.armyAfter)}`,
         `- Грейды: ${listText(player.upgrades)}`,
         `- Ключевые технологии: ${listText(player.technologies)}`,
         `- Стоимость армии: ${Math.round(player.armyValueBefore || 0)} → ${Math.round(player.armyValueAfter || 0)}`,
         `- Сверка: ${reconciliationText(player)}`);
+      pushOptionalComposition(lines, '- Рабочие', player.workersLost);
+      pushOptionalComposition(lines, '- Здания', player.structuresLost);
+      pushOptionalComposition(lines, '- Потери статичной обороны', player.staticDefenseLost);
     });
     lines.push('');
   });
@@ -41,8 +41,8 @@ export function narrativeAnalysisMarkdown(analysis) {
   const lines = [
     '## Narrative Analysis', '',
     `- Официальный результат реплея: ${narrative.officialReplayResult || '—'}`,
-    `- Статус анализа: ${narrative.status || '—'}`,
-    `- Strategic result: ${narrative.strategicResultStatus || 'NOT_EVALUATED'}`,
+    `- Статус анализа: ${analysisStatusText(narrative.status)}`,
+    `- Стратегический результат: ${strategicResultText(narrative.strategicResultStatus)}`,
     `- Команда фокуса: ${(narrative.focusTeamPlayers || []).join(', ') || '—'}`, '',
     narrative.summary?.verdict || 'Недостаточно данных для связного сценария.', '',
     '### Фазы', ''
@@ -60,32 +60,32 @@ export function narrativeAnalysisMarkdown(analysis) {
     const points = series.points || [];
     const first = points[0];
     const last = points[points.length - 1];
-    lines.push(`- ${series.label}: ${series.completeness || '—'}, ${points.length} точек${first && last ? `, ${clock(durationSeconds(first.at))}=${Math.round(first.value)}, ${clock(durationSeconds(last.at))}=${Math.round(last.value)}` : ''}`);
+    lines.push(`- ${series.label}: ${completenessText(series.completeness)}, ${points.length} точек${first && last ? `, ${clock(durationSeconds(first.at))}=${Math.round(first.value)}, ${clock(durationSeconds(last.at))}=${Math.round(last.value)}` : ''}`);
   });
   if (narrative.evidence) {
     lines.push('', '### Сравнение участников', '');
     (narrative.evidence.metricComparisons || []).forEach(metric => {
-      lines.push(`- ${metric.label}: ${metric.completeness || '—'}, ${(metric.series || []).length} серий`);
+      lines.push(`- ${metric.label}: ${completenessText(metric.completeness)}, ${(metric.series || []).length} серий`);
       (metric.series || []).forEach(series => {
         const participant = participantById(narrative.evidence, series.participantId);
         const points = series.points || [];
         const first = points[0];
         const last = points[points.length - 1];
-        lines.push(`  - ${participantName(participant)} (${relationshipText(participant)}): ${series.completeness || '—'}, ${series.lineStyle || 'solid'}, ${points.length} точек${first && last ? `, ${clock(durationSeconds(first.at))}=${Math.round(first.value)}, ${clock(durationSeconds(last.at))}=${Math.round(last.value)}` : ''}`);
+        lines.push(`  - ${participantName(participant)} (${relationshipText(participant)}): ${completenessText(series.completeness)}, ${lineStyleText(series.lineStyle)}, ${points.length} точек${first && last ? `, ${clock(durationSeconds(first.at))}=${Math.round(first.value)}, ${clock(durationSeconds(last.at))}=${Math.round(last.value)}` : ''}`);
       });
     });
-    lines.push('', '### Боевые evidence-таблицы', '');
+    lines.push('', '### Боевые таблицы доказательств', '');
     (narrative.evidence.combats || []).forEach(combat => {
       lines.push(`#### ${combat.label} · ${clock(durationSeconds(combat.startedAt))}–${clock(durationSeconds(combat.endedAt))}`);
       (combat.sides || []).forEach(side => {
-        lines.push(`- ${side.label}: ${side.completeness || '—'}`);
+        lines.push(`- ${side.label}: ${completenessText(side.completeness)}`);
         pushUnitRows(lines, '  - Итого', side.totalRows || []);
         (side.participants || []).forEach(player => {
-          lines.push(`  - ${player.player}: ${player.reconciliationStatus || '—'}, ${player.completeness || '—'}`);
+          lines.push(`  - ${player.player}: ${reconciliationStatusText(player.reconciliationStatus)}, ${completenessText(player.completeness)}`);
           pushUnitRows(lines, '    - Боевые юниты', player.rows || []);
-          lines.push(`    - Рабочие: ${composition(player.workerLosses)}`);
-          lines.push(`    - Здания: ${composition(player.structureLosses)}`);
-          lines.push(`    - Оборона: ${composition(player.staticDefenseLosses)}`);
+          pushOptionalComposition(lines, '    - Рабочие', player.workerLosses);
+          pushOptionalComposition(lines, '    - Здания', player.structureLosses);
+          pushOptionalComposition(lines, '    - Потери статичной обороны', player.staticDefenseLosses);
         });
       });
       (combat.notes || []).forEach(note => lines.push(`- Примечание: ${note}`));
@@ -104,7 +104,11 @@ function pushUnitRows(lines, label, rows) {
     lines.push(`${label}: нет`);
     return;
   }
-  rows.forEach(row => lines.push(`${label}: ${row.unit}: старт ${row.startCount}, новые ${row.additions}, потери ${row.losses}, финиш ${row.endCount}, kills ${countEvidence(row.creditedKills)}, ${row.reconciliationStatus || row.completeness || '—'}`));
+  rows.forEach(row => lines.push(`${label}: ${row.unit}: старт ${row.startCount}, новые ${row.additions}, потери ${row.losses}, финиш ${row.endCount}, убийства ${countEvidence(row.creditedKills)}, ${reconciliationStatusText(row.reconciliationStatus) || completenessText(row.completeness)}`));
+}
+
+function pushOptionalComposition(lines, label, value) {
+  if (hasValues(value)) lines.push(`${label}: ${composition(value)}`);
 }
 
 function pushMatchFlow(lines, matchFlow) {
@@ -112,7 +116,7 @@ function pushMatchFlow(lines, matchFlow) {
   lines.push('', '### Непрерывный ход матча', '');
   lines.push(`- Покрытие: ${clock(durationSeconds(matchFlow.matchStartedAt))}–${clock(durationSeconds(matchFlow.matchEndedAt))}, интервалов: ${matchFlow.intervals.length}`);
   (matchFlow.intervals || []).forEach(interval => {
-    lines.push(`- ${clock(durationSeconds(interval.startedAt))}–${clock(durationSeconds(interval.endedAt))}: ${interval.title} (${interval.kind || '—'}, ${interval.completeness || '—'}, ${Math.round((interval.confidence || 0) * 100)}%). ${interval.summary || ''}`);
+    lines.push(`- ${clock(durationSeconds(interval.startedAt))}–${clock(durationSeconds(interval.endedAt))}: ${interval.title} (${kindLabel(interval.kind)}, ${completenessText(interval.completeness)}, ${Math.round((interval.confidence || 0) * 100)}%). ${interval.summary || ''}`);
     const combat = interval.drilldown?.combat;
     if ((combat?.combatIds || []).length) {
       lines.push(`  - Бои: ${combat.combatIds.join(', ')}`);
@@ -153,6 +157,62 @@ function metricLabel(metric) {
     economyProxy: 'Экономика',
     supplyUsed: 'Занятый лимит',
   }[metric] || metric;
+}
+
+function kindLabel(kind) {
+  return {
+    OPENING_BUILDUP: 'открытие',
+    ECONOMIC_GROWTH: 'экономика',
+    TECH_TRANSITION: 'технологии',
+    ARMY_BUILDUP: 'армия',
+    MAP_CONTROL_OR_SCOUTING: 'карта/разведка',
+    PRESSURE_PREPARATION: 'подготовка',
+    COMBAT: 'бой',
+    RECOVERY: 'восстановление',
+    REGROUPING_OR_LOW_ACTIVITY: 'перегруппировка',
+    LOW_EVIDENCE: 'низкая доказательность',
+  }[kind] || 'интервал';
+}
+
+function completenessText(value) {
+  return {
+    COMPLETE: 'данные полные',
+    PARTIAL: 'частичные данные',
+    UNAVAILABLE: 'нет данных',
+  }[value] || 'статус неизвестен';
+}
+
+function analysisStatusText(value) {
+  return {
+    PRELIMINARY: 'предварительный',
+  }[value] || value || 'статус неизвестен';
+}
+
+function lineStyleText(value) {
+  return {
+    solid: 'сплошная линия',
+    dashed: 'пунктир',
+    dotted: 'точки',
+    dashdot: 'штрих-пунктир',
+  }[value] || 'линия';
+}
+
+function reconciliationStatusText(value) {
+  return {
+    EXACT: 'сверка точная',
+    PARTIAL: 'сверка частичная',
+    UNKNOWN: 'сверка неизвестна',
+  }[value] || '';
+}
+
+function strategicResultText(value) {
+  return {
+    NOT_EVALUATED: 'не оценивался',
+  }[value] || value || 'не оценивался';
+}
+
+function hasValues(map) {
+  return Object.values(map || {}).some(value => Number(value || 0) > 0);
 }
 
 function formatDelta(value) {

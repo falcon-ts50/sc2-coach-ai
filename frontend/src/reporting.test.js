@@ -87,7 +87,7 @@ test('renders backend-owned narrative analysis without strategic inference', () 
               combat: { combatIds: ['combat-2'], emptyStates: [] },
               development: {
                 macro: { metrics: [{ metric: 'armyValue', startValue: 100, endValue: 180, delta: 80 }] },
-                production: { observations: ['Lulu: new combat units became available during the interval: +16 Zergling.'] },
+                production: { observations: ['Lulu: новые боевые юниты стали доступны в интервале: +16 Zergling.'] },
               },
             },
           },
@@ -164,16 +164,16 @@ test('renders backend-owned narrative analysis without strategic inference', () 
               staticDefenseLosses: {},
             }],
           }],
-          notes: ['Kill attribution is unavailable.'],
+          notes: ['Убийства по юнитам недоступны.'],
         }],
       },
-      limitations: ['Replay does not prove intent.'],
+      limitations: ['Реплей не доказывает намерение.'],
     },
     combats: [],
   });
 
   assert.match(markdown, /## Narrative Analysis/);
-  assert.match(markdown, /Strategic result: NOT_EVALUATED/);
+  assert.match(markdown, /Стратегический результат: не оценивался/);
   assert.match(markdown, /Раннее давление/);
   assert.match(markdown, /### Непрерывный ход матча/);
   assert.match(markdown, /Покрытие: 0:00–10:00, интервалов: 2/);
@@ -181,12 +181,13 @@ test('renders backend-owned narrative analysis without strategic inference', () 
   assert.match(markdown, /Развитие: Стоимость армии 100 → 180 \(\+80\)/);
   assert.match(markdown, /Боёв в этом интервале не обнаружено/);
   assert.match(markdown, /Экономических, производственных, технологических или разведывательных событий/);
-  assert.match(markdown, /Стоимость армии: COMPLETE, 2 точек/);
-  assert.match(markdown, /dragonDriver \(фокус\): COMPLETE, solid, 2 точек/);
-  assert.match(markdown, /Lulu \(союзник\): PARTIAL, dashed, 2 точек/);
-  assert.match(markdown, /Zergling: старт 2, новые 16, потери 3, финиш 15, kills нет данных, EXACT/);
+  assert.match(markdown, /Стоимость армии: данные полные, 2 точек/);
+  assert.match(markdown, /Статус анализа: предварительный/);
+  assert.match(markdown, /dragonDriver \(фокус\): данные полные, сплошная линия, 2 точек/);
+  assert.match(markdown, /Lulu \(союзник\): частичные данные, пунктир, 2 точек/);
+  assert.match(markdown, /Zergling: старт 2, новые 16, потери 3, финиш 15, убийства нет данных, сверка точная/);
   assert.match(markdown, /Рабочие: 1 × Drone/);
-  assert.doesNotMatch(markdown, /guaranteed win|caused/i);
+  assert.doesNotMatch(markdown, /guaranteed win|caused|COMPLETE|PARTIAL|UNAVAILABLE|Strategic result|kills|PRELIMINARY|solid|dashed/i);
 });
 
 test('distinguishes empty and unavailable values', () => {
