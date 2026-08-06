@@ -39,8 +39,8 @@ class NarrativeAnalysisEngineTest {
 
         assertThat(analysis.officialReplayResult()).isEqualTo("Win");
         assertThat(analysis.strategicResultStatus()).isEqualTo("NOT_EVALUATED");
-        assertThat(analysis.summary().verdict()).contains("strategic result не вычисляется");
-        assertThat(analysis.summary().limitations()).anyMatch(item -> item.contains("does not assert"));
+        assertThat(analysis.summary().verdict()).contains("стратегический результат не вычисляется");
+        assertThat(analysis.summary().limitations()).anyMatch(item -> item.contains("не утверждает"));
     }
 
     @Test
