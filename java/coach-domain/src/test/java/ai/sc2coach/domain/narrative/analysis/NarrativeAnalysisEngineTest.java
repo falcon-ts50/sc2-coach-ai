@@ -164,6 +164,7 @@ class NarrativeAnalysisEngineTest {
     void serializesSeparateEmptyStatesForNoCombatAndNoDevelopmentEvidence() {
         NarrativeAnalysis analysis = engine.analyze(lowEvidenceInput());
 
+        assertThat(analysis.matchFlow().intervals()).hasSize(1);
         MatchFlow.MatchFlowInterval emptyInterval = analysis.matchFlow().intervals().stream()
                 .filter(interval -> !interval.drilldown().combat().emptyStates().isEmpty())
                 .filter(interval -> !interval.drilldown().development().emptyStates().isEmpty())

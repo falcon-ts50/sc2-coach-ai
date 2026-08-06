@@ -491,14 +491,13 @@ public final class NarrativeAnalysisEngine {
         TreeSet<Duration> boundaries = new TreeSet<>();
         boundaries.add(start);
         boundaries.add(end);
-        snapshots.forEach(snapshot -> boundaries.add(clamp(snapshot.at(), start, end)));
         phases.forEach(phase -> {
-            boundaries.add(clamp(phase.startedAt(), start, end));
-            boundaries.add(clamp(phase.endedAt(), start, end));
+            addMatchFlowBoundary(boundaries, phase.startedAt(), start, end);
+            addMatchFlowBoundary(boundaries, phase.endedAt(), start, end);
         });
         combats.forEach(combat -> {
-            boundaries.add(clamp(combat.startedAt(), start, end));
-            boundaries.add(clamp(combat.endedAt(), start, end));
+            addMatchFlowBoundary(boundaries, combat.startedAt(), start, end);
+            addMatchFlowBoundary(boundaries, combat.endedAt(), start, end);
         });
 
         Map<String, CombatEvidence> combatEvidenceById = evidence.combats().stream()
@@ -566,6 +565,16 @@ public final class NarrativeAnalysisEngine {
             end = max(end, combat.endedAt());
         }
         return end;
+    }
+
+    private void addMatchFlowBoundary(TreeSet<Duration> boundaries, Duration value, Duration start, Duration end) {
+        Duration boundary = clamp(value, start, end);
+        if (boundary.minus(start).compareTo(Duration.ofSeconds(1)) <= 0) {
+            boundary = start;
+        } else if (end.minus(boundary).compareTo(Duration.ofSeconds(1)) <= 0) {
+            boundary = end;
+        }
+        boundaries.add(boundary);
     }
 
     private Duration max(Duration left, Duration right) {
