@@ -1,6 +1,6 @@
 # SC2 Coach AI — Project State
 
-Last updated: 2026-08-05
+Last updated: 2026-08-06
 Primary integration branch: `develop`
 Production branch: `main`
 
@@ -17,6 +17,7 @@ SC2Replay
   -> macro and turning-point analysis
   -> Combat Engine V2
   -> Narrative Analysis vertical slice
+  -> Continuous Match Flow
   -> Combat Narrative Engine
   -> Coach feed/API response
   -> React report
@@ -43,6 +44,7 @@ SC2Replay
 - Information Engine V1 domain contracts for scouting-derived potential information, gaps, response candidates and information state.
 - Narrative Analysis V1 vertical slice exposes a backend-owned player-focused timeline, preliminary verdict, state transitions, cautious causal chain and match-overview chart model through REST, Markdown, support bundle and the React report.
 - Narrative evidence visualization exposes backend-owned all-participant army/economy/supply comparison series, shared evidence focus references, and team-aware combat force tables through REST, Markdown, support bundle and the React report.
+- Continuous Match Flow exposes backend-owned no-gap intervals from match start to match end, with stable IDs, interval-level metrics, combat/development drilldown sections, explicit empty states, strong selected-interval graph focus in React, and Markdown/support-bundle parity.
 
 ## Known limitations
 
@@ -53,6 +55,7 @@ SC2Replay
 - Army reconstruction is lifecycle-event based and can be incomplete when replay events omit ownership or transformations.
 - Combat additions mean units that became available during the engagement interval; the report does not claim those units physically joined the local fight unless future spatial evidence supports that.
 - Per-unit combat kill credit is marked unavailable in Narrative Evidence because the current production combat DTO does not expose stable killer-unit identity; unknown kill credit must not be rendered as zero.
+- Continuous Match Flow development evidence is limited to currently available macro deltas, combat-window additions, combat snapshot upgrades/technologies and derived preparation signals. It does not prove exact production timing, research completion timing, scouting vision, or player intent.
 - Combat outcome is heuristic, not a full simulation of tactical value.
 - Unit display-name normalization is incomplete compared with the full Blizzard localization catalog.
 - Narrative quality depends on confidence of combat reconstruction and macro metrics.
