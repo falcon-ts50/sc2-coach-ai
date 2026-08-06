@@ -117,10 +117,10 @@ function DashboardReport({ analysis }) {
   const episodes = dashboard.evidenceEpisodes?.length
     ? dashboard.evidenceEpisodes
     : intervals.map(interval => episodeFromInterval(interval));
-  const [selectedEpisodeId, setSelectedEpisodeId] = useState(episodes[0]?.id || '');
+  const [selectedEpisodeId, setSelectedEpisodeId] = useState('');
   const [activeMetricId, setActiveMetricId] = useState('armyValue');
   const [hoverAt, setHoverAt] = useState(null);
-  const selectedEpisode = episodes.find(episode => episode.id === selectedEpisodeId) || episodes[0] || null;
+  const selectedEpisode = episodes.find(episode => episode.id === selectedEpisodeId) || null;
   const selectedInterval = intervalForEpisode(selectedEpisode, intervals);
   const metrics = evidence.metricComparisons?.length
     ? evidence.metricComparisons
@@ -128,10 +128,11 @@ function DashboardReport({ analysis }) {
   const activeMetric = metrics.find(metric => metric.id === activeMetricId) || metrics[0];
   const participants = evidence.participants || [];
   const selectedRange = selectedEpisode ? { id: selectedEpisode.id, from: selectedEpisode.startedAt, to: selectedEpisode.endedAt } : null;
+  const toggleEpisode = episodeId => setSelectedEpisodeId(current => current === episodeId ? '' : episodeId);
   const selectEpisodeAt = at => {
     const seconds = durationSeconds(at);
     const episode = episodes.find(item => seconds >= durationSeconds(item.startedAt) && seconds < durationSeconds(item.endedAt));
-    if (episode) setSelectedEpisodeId(episode.id);
+    if (episode) toggleEpisode(episode.id);
   };
 
   if (!narrative) return null;
@@ -141,7 +142,7 @@ function DashboardReport({ analysis }) {
     <div className="dashboard-grid">
       <aside className="episode-rail">
         <h3>Ключевые эпизоды</h3>
-        <div className="episode-list">{episodes.map(episode => <button className={episode.id === selectedEpisode?.id ? 'episode-card selected' : 'episode-card'} key={episode.id} onClick={() => setSelectedEpisodeId(episode.id)}>
+        <div className="episode-list">{episodes.map(episode => <button className={episode.id === selectedEpisode?.id ? 'episode-card selected' : 'episode-card'} key={episode.id} onClick={() => toggleEpisode(episode.id)}>
           <time>{clock(durationSeconds(episode.startedAt))}–{clock(durationSeconds(episode.endedAt))}</time>
           <strong>{episode.title}</strong>
           <span>{episode.summary}</span>
@@ -150,10 +151,11 @@ function DashboardReport({ analysis }) {
       </aside>
       <section className="chart-workspace">
         <div className="metric-tabs" role="tablist" aria-label="Метрика графика">
+          <button type="button" className={!selectedEpisode ? 'active' : ''} onClick={() => setSelectedEpisodeId('')}>Весь матч</button>
           {metrics.map(metric => <button type="button" className={metric.id === activeMetric?.id ? 'active' : ''} key={metric.id} onClick={() => setActiveMetricId(metric.id)}>{metric.label}</button>)}
         </div>
         {activeMetric && <MetricComparisonChart metric={activeMetric} participants={participants} focuses={episodeFocuses(episodes)} selected={selectedRange} hoverAt={hoverAt} onHover={setHoverAt} onFocusAt={selectEpisodeAt} />}
-        <TimelineStrip episodes={episodes} selected={selectedEpisode} onSelect={setSelectedEpisodeId} />
+        <TimelineStrip episodes={episodes} selected={selectedEpisode} onSelect={toggleEpisode} />
       </section>
       <aside className="insight-column">
         <InsightPanel title="Состав армий" lines={compositionInsights(selectedInterval)} />
@@ -162,11 +164,13 @@ function DashboardReport({ analysis }) {
       </aside>
       <section className="selected-episode-workspace">
         <header>
-          <span className="eyebrow">ВЫБРАННЫЙ ЭПИЗОД</span>
-          <h2>{selectedEpisode?.title || 'Эпизод не выбран'}</h2>
-          {selectedEpisode && <p>{clock(durationSeconds(selectedEpisode.startedAt))}–{clock(durationSeconds(selectedEpisode.endedAt))}. {selectedEpisode.summary}</p>}
+          <span className="eyebrow">{selectedEpisode ? 'ВЫБРАННЫЙ ЭПИЗОД' : 'ОБЗОР МАТЧА'}</span>
+          <h2>{selectedEpisode?.title || 'Весь матч'}</h2>
+          {selectedEpisode
+            ? <p>{clock(durationSeconds(selectedEpisode.startedAt))}–{clock(durationSeconds(selectedEpisode.endedAt))}. {selectedEpisode.summary}</p>
+            : <p>Выберите эпизод на графике, в списке или на таймлайне, чтобы открыть его доказательную базу.</p>}
         </header>
-        <EpisodeDeltas episode={selectedEpisode} participants={participants} />
+        {selectedEpisode && <EpisodeDeltas episode={selectedEpisode} participants={participants} />}
         <IntervalDrilldown interval={selectedInterval} />
       </section>
     </div>
