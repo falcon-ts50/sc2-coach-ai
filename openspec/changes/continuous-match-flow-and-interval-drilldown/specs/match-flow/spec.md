@@ -16,6 +16,23 @@ The report SHALL classify the full match timeline into deterministic adjacent in
 - AND the last interval ends at match end;
 - AND adjacent intervals cover the timeline without holes.
 
+### Scenario: Adjacent interval partition
+
+- GIVEN generated match-flow intervals;
+- WHEN they are serialized;
+- THEN interval ordinals are strictly increasing from zero;
+- AND every interval has `startedAt < endedAt`;
+- AND every interval after the first starts exactly when the previous interval ends;
+- AND no serialized intervals overlap.
+
+### Scenario: Previously missing phase ranges
+
+- GIVEN the fixed benchmark replay for `dragonDriver`;
+- AND the previous Narrative phase model left uncovered time ranges including 7:10-7:50, 12:40-16:00 and 21:30-match end;
+- WHEN match-flow intervals are generated;
+- THEN those ranges are covered by explicit `COMBAT`, non-combat, `REGROUPING_OR_LOW_ACTIVITY` or `LOW_EVIDENCE` intervals;
+- AND none of those ranges disappear from the report.
+
 ### Scenario: Thin evidence
 
 - GIVEN a time range with insufficient evidence for a specific strategic label;
@@ -33,6 +50,13 @@ The match flow SHALL classify non-combat periods when no fight is detected.
 - AND economy or supply metrics change materially;
 - WHEN the interval is generated;
 - THEN it is classified as an economic, army buildup, recovery or preparation interval rather than disappearing.
+
+### Scenario: Low-confidence fallback is explicit
+
+- GIVEN a combat-free interval with weak metric deltas and no usable production, scouting or tech evidence;
+- WHEN the interval is classified;
+- THEN its kind is `REGROUPING_OR_LOW_ACTIVITY`, `LOW_EVIDENCE` or an equivalent explicit low-confidence category;
+- AND the interval carries confidence/completeness values and limitations.
 
 ### Scenario: No detected combat in selected interval
 
@@ -59,6 +83,24 @@ Selecting an interval SHALL make that interval visually dominant on every graph.
 - WHEN graphs render;
 - THEN all-player series remain visible in normal overview mode.
 
+## Requirement: Backend-owned match-flow contract
+
+The backend SHALL serialize an additive match-flow contract with stable interval identity and backend-owned evidence mapping.
+
+### Scenario: Interval contract fields
+
+- GIVEN match-flow intervals are serialized in `NarrativeAnalysis`;
+- WHEN a client reads an interval;
+- THEN it has stable `id`, `ordinal`, `kind`, `title`, `startedAt`, `endedAt`, `confidence`, `completeness`, `summary`, evidence references, combat IDs, metric start/end data, metric deltas, drilldown and limitations;
+- AND React does not need to infer interval membership or recompute interval deltas from chart points.
+
+### Scenario: Participant metric identity
+
+- GIVEN interval metrics are serialized;
+- WHEN they reference a participant;
+- THEN the participant ID matches an ID from `NarrativeEvidence.ParticipantIdentity`;
+- AND the same identity can be used across army, economy and supply graph series.
+
 ## Requirement: Backend-owned interval drilldown
 
 The backend SHALL own interval-to-evidence mapping and drilldown semantics.
@@ -70,6 +112,13 @@ The backend SHALL own interval-to-evidence mapping and drilldown semantics.
 - THEN the drilldown references those combat IDs;
 - AND React renders the corresponding backend-owned combat evidence.
 
+### Scenario: Multiple combats in one interval
+
+- GIVEN multiple detected combats overlap the same selected interval;
+- WHEN interval drilldown is serialized;
+- THEN every overlapping combat ID is included in deterministic chronological order;
+- AND unrelated combats outside the interval are not included.
+
 ### Scenario: Macro interval
 
 - GIVEN no detected combats overlap the selected interval;
@@ -77,6 +126,14 @@ The backend SHALL own interval-to-evidence mapping and drilldown semantics.
 - WHEN interval drilldown is serialized;
 - THEN the drilldown contains the available macro evidence;
 - AND does not invent missing decoder data.
+
+### Scenario: Empty non-combat interval
+
+- GIVEN no detected combats overlap the selected interval;
+- AND no macro/preparation evidence is available beyond low-confidence state changes;
+- WHEN interval drilldown is serialized;
+- THEN the drilldown contains an explicit no-combat empty state;
+- AND limitations explain which data is unavailable.
 
 ## Requirement: Preserve all-player comparison
 
@@ -88,6 +145,13 @@ All-player participant comparison from Narrative Evidence SHALL remain part of t
 - WHEN match-flow graphs render;
 - THEN `dragonDriver`, `Lulu`, `Frontdoor` and `Guardian` remain represented on the primary metric graphs where data exists;
 - AND selected interval focus does not remove participant identity.
+
+### Scenario: Selected interval focus preserves context
+
+- GIVEN the user selects an interval;
+- WHEN the army, economy and supply graphs render;
+- THEN all benchmark participants remain identifiable;
+- AND non-selected time is muted without deleting series identity or relationship labels.
 
 ## Requirement: Combat table readability
 
@@ -127,3 +191,10 @@ Markdown and support bundle output SHALL include the same continuous intervals a
 - GIVEN the browser displays match-flow intervals and selected interval evidence;
 - WHEN Markdown/support bundle is generated;
 - THEN interval IDs, labels, time ranges, combat IDs, empty states and limitations are represented consistently.
+
+### Scenario: Fixed benchmark acceptance record
+
+- GIVEN the fixed benchmark replay/support bundle and `dragonDriver` perspective;
+- WHEN implementation verification is performed;
+- THEN the PR records ACTUAL interval count, first/last timestamps, category distribution, combat-to-interval mapping and no-combat interval examples;
+- AND verifies the full timeline has no temporal gaps.

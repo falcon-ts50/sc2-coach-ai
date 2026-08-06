@@ -2,19 +2,38 @@
 
 ## 1. Review and input audit
 
-- [ ] Complete the Read Gate from `openspec/AGENTS.md`.
+- [x] Complete the Read Gate from `openspec/AGENTS.md`.
+  - Evidence: read `openspec/project.md`, `docs/PROJECT_STATE.md`, `docs/DECISIONS.md`, `ROADMAP.md`, `ARCHITECTURE.md`, the full `openspec/changes/continuous-match-flow-and-interval-drilldown/` packet, open PR state, and relevant Narrative/Combat/frontend/Markdown files.
+  - Active change: `continuous-match-flow-and-interval-drilldown`; base branch and intended PR target: `develop`.
+  - Objective: refine the REVIEW packet so APPLY has a concrete backend-owned continuous match-flow contract, no-gap rules and benchmark acceptance expectations.
+  - In scope for this refinement: OpenSpec proposal/design/spec/task clarity only.
+  - Non-goals for this refinement: production Java/React/Markdown implementation, version bump, release, Docker/local full-suite validation.
+  - Open PR state during refinement: no open PRs targeting `develop`.
 - [ ] Inspect current Narrative Analysis intervals, Narrative Evidence graphs, Combat history, Markdown and support-bundle serializers.
 - [ ] Confirm fixed benchmark replay/support bundle and current `dragonDriver` ACTUAL values.
 - [ ] Identify which non-combat evidence is currently available from `MatchContext`, timeline events and transcript-derived data.
 - [ ] Document unavailable data explicitly: exact intent, full vision, physical participation of additions, killer-unit identity where still absent.
 
+### REVIEW refinement notes
+
+- Current Narrative phases are not a no-gap partition: `NarrativeAnalysisEngine.phases(...)` may leave time after transition windows uncovered.
+- Existing fixed artifact inspection found five old Narrative phase intervals for `dragonDriver` and visible holes including 7:10-7:50, 12:40-16:00 and 21:30-match end.
+- Fixed replay artifact: `/root/openclaw-artifacts/sc2-coach-ai/replays/2026-08-05/2026_08_04_TFrontdoor_ZGuardian_VS_TdragonDriver_ZLulu.SC2Replay`.
+- Observed replay SHA-256 during REVIEW refinement: `9031068478141554827027ee64b16951fec123c0c90acb2ebb6de99358e11315`.
+- Existing benchmark response inspected: `/root/openclaw-artifacts/sc2-coach-ai/support-bundles/2026-08-05/narrative-analysis-vertical-slice/analysis-response.json`.
+- That response has match duration about 23:11 and eight detected combat episodes.
+- APPLY verification must record the new ACTUAL interval count, exact interval bounds, kind distribution, combat-to-interval mapping and no-combat empty-state examples for the same artifact.
+
 ## 2. Continuous match-flow domain model
 
+- [ ] Add backend-owned `MatchFlow` with schema version, canonical match bounds, intervals, optional overview combat IDs and limitations.
 - [ ] Add backend-owned continuous `MatchFlowInterval` or equivalent contract.
 - [ ] Define interval kind taxonomy for combat and non-combat states.
 - [ ] Ensure serialized intervals cover match start to match end without gaps.
 - [ ] Carry confidence/completeness and limitations on every interval.
 - [ ] Add deterministic ordering and stable interval IDs.
+- [ ] Use half-open interval semantics `[startedAt, endedAt)` except the final interval ending at match end.
+- [ ] Serialize start/end metrics and deltas by `NarrativeEvidence.ParticipantIdentity` ID.
 - [ ] Add domain tests for no-gap coverage, low-evidence fallback and boundary normalization.
 
 ## 3. Non-combat classification
@@ -30,6 +49,8 @@
 - [ ] Map detected combats to overlapping match-flow intervals.
 - [ ] Add backend-owned interval drilldown contract.
 - [ ] For combat intervals, include relevant `NarrativeEvidence.CombatEvidence` references.
+- [ ] For intervals with multiple overlapping combats, include all combat IDs in chronological order.
+- [ ] For every interval, reject unrelated combat IDs that do not overlap the interval bounds.
 - [ ] For non-combat intervals, include available macro/preparation evidence.
 - [ ] When no combats are present, serialize an explicit empty state.
 - [ ] Add tests for intervals with one combat, multiple combats and no combats.
