@@ -48,12 +48,15 @@
 
 - [ ] Map detected combats to overlapping match-flow intervals.
 - [ ] Add backend-owned interval drilldown contract.
+- [ ] Model interval drilldown as two independent sections: combat and development.
+- [ ] Ensure every interval serializes both sections, even when one or both are empty.
 - [ ] For combat intervals, include relevant `NarrativeEvidence.CombatEvidence` references.
 - [ ] For intervals with multiple overlapping combats, include all combat IDs in chronological order.
 - [ ] For every interval, reject unrelated combat IDs that do not overlap the interval bounds.
-- [ ] For non-combat intervals, include available macro/preparation evidence.
-- [ ] When no combats are present, serialize an explicit empty state.
-- [ ] Add tests for intervals with one combat, multiple combats and no combats.
+- [ ] For every interval, include available economy, production, upgrade, tech, scouting or preparation evidence where current data supports it.
+- [ ] When no combats are present, serialize an explicit combat empty state.
+- [ ] When no development evidence is present, serialize an explicit development empty state.
+- [ ] Add tests for intervals with one combat, multiple combats, no combats, combat plus development evidence, and no development evidence.
 
 ## 5. Strong graph focus
 
@@ -67,9 +70,11 @@
 ## 6. Interval drilldown UI
 
 - [ ] Show drilldown below the graph area for the selected interval.
+- [ ] Show separate combat and development sections for the selected interval.
 - [ ] Show combat evidence only for combats inside the selected interval.
-- [ ] Show `боёв в этом интервале не обнаружено` or equivalent when empty.
-- [ ] Show macro/preparation evidence for non-combat intervals where available.
+- [ ] Show `боёв в этом интервале не обнаружено` or equivalent in the combat section when empty.
+- [ ] Show macro/preparation/development evidence for any interval where available, including combat intervals.
+- [ ] Show `экономических/технологических событий в этом интервале не обнаружено` or equivalent in the development section when empty.
 - [ ] Decide whether no-selection mode shows all combats or hides drilldown; document the chosen behaviour.
 - [ ] Keep mobile layout readable.
 
@@ -86,7 +91,8 @@
 
 - [ ] Add continuous match-flow intervals to Markdown output.
 - [ ] Add selected-interval/drilldown semantics to support bundle JSON.
-- [ ] Include no-combat empty states and limitations in Markdown/support bundle.
+- [ ] Include separate combat/development sections in Markdown/support bundle.
+- [ ] Include no-combat and no-development-evidence empty states and limitations in Markdown/support bundle.
 - [ ] Add parity tests using the backend-owned interval model.
 
 ## 9. Benchmark acceptance
@@ -97,7 +103,8 @@
 - [ ] Verify all four benchmark participants remain on primary graphs where data exists.
 - [ ] Verify selected interval focus strongly mutes non-selected time.
 - [ ] Verify interval drilldown shows the correct combats or no-combat empty state.
-- [ ] Verify non-combat economic/preparation intervals show available evidence rather than fight cards.
+- [ ] Verify development sections show available economy/tech/production/scouting/preparation evidence in both combat and non-combat intervals.
+- [ ] Verify intervals without development evidence show an explicit development empty state.
 - [ ] Verify combat table readability for the fixed benchmark's first multi-participant fight.
 
 ## 10. Documentation and release

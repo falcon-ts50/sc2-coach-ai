@@ -65,6 +65,13 @@ The match flow SHALL classify non-combat periods when no fight is detected.
 - THEN the report explicitly states that no detected combats occurred in the interval;
 - AND displays available non-combat evidence.
 
+### Scenario: No development evidence in selected interval
+
+- GIVEN a selected interval has no available economy, production, upgrade, tech, scouting or preparation evidence;
+- WHEN interval drilldown is rendered;
+- THEN the report explicitly states that no development evidence is available for that interval;
+- AND the interval remains visible in the continuous timeline.
+
 ## Requirement: Strong graph focus
 
 Selecting an interval SHALL make that interval visually dominant on every graph.
@@ -105,26 +112,44 @@ The backend SHALL serialize an additive match-flow contract with stable interval
 
 The backend SHALL own interval-to-evidence mapping and drilldown semantics.
 
+### Scenario: Every interval has combat and development sections
+
+- GIVEN a match-flow interval is serialized;
+- WHEN interval drilldown is read;
+- THEN it contains a combat section;
+- AND it contains a development section;
+- AND each section contains either interval-relevant evidence or an explicit empty state.
+
 ### Scenario: Combat interval
 
 - GIVEN one or more detected combats overlap the selected interval;
 - WHEN interval drilldown is serialized;
-- THEN the drilldown references those combat IDs;
+- THEN the combat drilldown section references those combat IDs;
 - AND React renders the corresponding backend-owned combat evidence.
 
 ### Scenario: Multiple combats in one interval
 
 - GIVEN multiple detected combats overlap the same selected interval;
 - WHEN interval drilldown is serialized;
-- THEN every overlapping combat ID is included in deterministic chronological order;
+- THEN every overlapping combat ID is included in the combat section in deterministic chronological order;
 - AND unrelated combats outside the interval are not included.
 
-### Scenario: Macro interval
+### Scenario: Combat interval also has development evidence
+
+- GIVEN one or more detected combats overlap the selected interval;
+- AND economy, production, upgrade, tech, scouting or preparation evidence is also available inside the same bounds;
+- WHEN interval drilldown is serialized;
+- THEN the combat section includes the overlapping combats;
+- AND the development section includes the available development evidence;
+- AND the combat classification does not suppress the development section.
+
+### Scenario: Macro/development interval
 
 - GIVEN no detected combats overlap the selected interval;
 - AND macro/preparation evidence is available;
 - WHEN interval drilldown is serialized;
-- THEN the drilldown contains the available macro evidence;
+- THEN the combat section contains an explicit no-combat empty state;
+- AND the development section contains the available macro/preparation evidence;
 - AND does not invent missing decoder data.
 
 ### Scenario: Empty non-combat interval
@@ -132,7 +157,8 @@ The backend SHALL own interval-to-evidence mapping and drilldown semantics.
 - GIVEN no detected combats overlap the selected interval;
 - AND no macro/preparation evidence is available beyond low-confidence state changes;
 - WHEN interval drilldown is serialized;
-- THEN the drilldown contains an explicit no-combat empty state;
+- THEN the combat section contains an explicit no-combat empty state;
+- AND the development section contains an explicit no-development-evidence empty state;
 - AND limitations explain which data is unavailable.
 
 ## Requirement: Preserve all-player comparison
@@ -190,11 +216,11 @@ Markdown and support bundle output SHALL include the same continuous intervals a
 
 - GIVEN the browser displays match-flow intervals and selected interval evidence;
 - WHEN Markdown/support bundle is generated;
-- THEN interval IDs, labels, time ranges, combat IDs, empty states and limitations are represented consistently.
+- THEN interval IDs, labels, time ranges, combat IDs, combat empty states, development empty states and limitations are represented consistently.
 
 ### Scenario: Fixed benchmark acceptance record
 
 - GIVEN the fixed benchmark replay/support bundle and `dragonDriver` perspective;
 - WHEN implementation verification is performed;
-- THEN the PR records ACTUAL interval count, first/last timestamps, category distribution, combat-to-interval mapping and no-combat interval examples;
+- THEN the PR records ACTUAL interval count, first/last timestamps, category distribution, combat-to-interval mapping, no-combat examples and no-development-evidence examples;
 - AND verifies the full timeline has no temporal gaps.
