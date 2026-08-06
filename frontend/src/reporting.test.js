@@ -70,6 +70,43 @@ test('renders backend-owned narrative analysis without strategic inference', () 
           points: [{ at: 'PT0S', value: 0 }, { at: 'PT420S', value: 900 }],
         }],
       },
+      matchFlow: {
+        matchStartedAt: 'PT0S',
+        matchEndedAt: 'PT10M',
+        intervals: [
+          {
+            id: 'match-flow-000',
+            kind: 'COMBAT',
+            title: 'Боевой интервал',
+            startedAt: 'PT6M13S',
+            endedAt: 'PT7M3S',
+            confidence: 0.78,
+            completeness: 'PARTIAL',
+            summary: 'Бой и развитие.',
+            drilldown: {
+              combat: { combatIds: ['combat-2'], emptyStates: [] },
+              development: {
+                macro: { metrics: [{ metric: 'armyValue', startValue: 100, endValue: 180, delta: 80 }] },
+                production: { observations: ['Lulu: new combat units became available during the interval: +16 Zergling.'] },
+              },
+            },
+          },
+          {
+            id: 'match-flow-001',
+            kind: 'LOW_EVIDENCE',
+            title: 'Низкая доказательность',
+            startedAt: 'PT7M3S',
+            endedAt: 'PT10M',
+            confidence: 0.38,
+            completeness: 'PARTIAL',
+            summary: 'Нет уверенных событий.',
+            drilldown: {
+              combat: { combatIds: [], emptyStates: ['Боёв в этом интервале не обнаружено.'] },
+              development: { emptyStates: ['Экономических, производственных, технологических или разведывательных событий в этом интервале не обнаружено.'] },
+            },
+          },
+        ],
+      },
       evidence: {
         participants: [
           { id: 'participant-dragondriver', displayName: 'dragonDriver', relationship: 'SELECTED' },
@@ -138,6 +175,12 @@ test('renders backend-owned narrative analysis without strategic inference', () 
   assert.match(markdown, /## Narrative Analysis/);
   assert.match(markdown, /Strategic result: NOT_EVALUATED/);
   assert.match(markdown, /Раннее давление/);
+  assert.match(markdown, /### Непрерывный ход матча/);
+  assert.match(markdown, /Покрытие: 0:00–10:00, интервалов: 2/);
+  assert.match(markdown, /Бои: combat-2/);
+  assert.match(markdown, /Развитие: Стоимость армии 100 → 180 \(\+80\)/);
+  assert.match(markdown, /Боёв в этом интервале не обнаружено/);
+  assert.match(markdown, /Экономических, производственных, технологических или разведывательных событий/);
   assert.match(markdown, /Стоимость армии: COMPLETE, 2 точек/);
   assert.match(markdown, /dragonDriver \(фокус\): COMPLETE, solid, 2 точек/);
   assert.match(markdown, /Lulu \(союзник\): PARTIAL, dashed, 2 точек/);

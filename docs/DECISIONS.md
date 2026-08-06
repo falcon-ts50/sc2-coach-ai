@@ -143,3 +143,13 @@ Narrative evidence visualization is a backend-owned view model layered on top of
 All participant metric graphs share the same match-time evidence basis and use stable identity across army value, economy proxy and occupied supply. The selected player is visually dominant, while teammates and opponents remain visible through subordinate line style and relationship labels so colour is not the only cue.
 
 Per-unit credited kills are only shown when replay/domain evidence exposes stable killer-unit identity. The current production combat DTO does not expose that identity, so kill credit is serialized and rendered as unavailable rather than zero. Combat additions keep ADR-012 semantics: units became available during the interval, without claiming local participation unless spatial evidence supports it.
+
+## ADR-016 — Match Flow owns continuous interval drilldown
+
+**Status:** Accepted
+
+Narrative Analysis owns a continuous `MatchFlow` contract in addition to the earlier high-level phases. `MatchFlow` intervals partition the match from canonical start to canonical end using half-open bounds `[startedAt, endedAt)`, stable IDs, deterministic ordering, confidence, completeness and limitations. Empty time is not omitted: when evidence is weak, the interval is serialized as low evidence rather than inferred into a confident story.
+
+Every interval serializes both combat and development drilldown sections. Combat evidence maps by interval overlap and may be empty. Development evidence may include available macro deltas, production/addition references, upgrades/technologies, scouting or preparation signals, and may also be empty. The UI and Markdown render those backend-owned sections and explicit empty states; they do not infer missing combats, exact production timing, full vision, player intent, or unobserved strategic meaning.
+
+Graph focus is interval-driven: overview mode keeps all participant series visible, while selecting an interval strongly mutes the non-selected time ranges and preserves the selected segment in normal colour/opacity across army, economy and supply charts.

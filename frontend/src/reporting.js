@@ -50,6 +50,7 @@ export function narrativeAnalysisMarkdown(analysis) {
   (narrative.timeline?.phases || []).forEach(phase => {
     lines.push(`- ${clock(durationSeconds(phase.startedAt))}–${clock(durationSeconds(phase.endedAt))}: ${phase.title}. ${phase.summary}`);
   });
+  pushMatchFlow(lines, narrative.matchFlow);
   lines.push('', '### Сценарная цепочка', '');
   (narrative.timeline?.causalLinks || []).forEach(link => {
     lines.push(`- ${link.kind}: ${link.statement}`);
@@ -104,6 +105,59 @@ function pushUnitRows(lines, label, rows) {
     return;
   }
   rows.forEach(row => lines.push(`${label}: ${row.unit}: старт ${row.startCount}, новые ${row.additions}, потери ${row.losses}, финиш ${row.endCount}, kills ${countEvidence(row.creditedKills)}, ${row.reconciliationStatus || row.completeness || '—'}`));
+}
+
+function pushMatchFlow(lines, matchFlow) {
+  if (!matchFlow?.intervals?.length) return;
+  lines.push('', '### Непрерывный ход матча', '');
+  lines.push(`- Покрытие: ${clock(durationSeconds(matchFlow.matchStartedAt))}–${clock(durationSeconds(matchFlow.matchEndedAt))}, интервалов: ${matchFlow.intervals.length}`);
+  (matchFlow.intervals || []).forEach(interval => {
+    lines.push(`- ${clock(durationSeconds(interval.startedAt))}–${clock(durationSeconds(interval.endedAt))}: ${interval.title} (${interval.kind || '—'}, ${interval.completeness || '—'}, ${Math.round((interval.confidence || 0) * 100)}%). ${interval.summary || ''}`);
+    const combat = interval.drilldown?.combat;
+    if ((combat?.combatIds || []).length) {
+      lines.push(`  - Бои: ${combat.combatIds.join(', ')}`);
+    } else {
+      (combat?.emptyStates || ['Боёв в этом интервале не обнаружено.']).forEach(item => lines.push(`  - Бои: ${item}`));
+    }
+    pushDevelopment(lines, interval.drilldown?.development);
+    (interval.limitations || []).forEach(item => lines.push(`  - Ограничение: ${item}`));
+  });
+}
+
+function pushDevelopment(lines, development) {
+  if (!development) {
+    lines.push('  - Развитие: нет данных');
+    return;
+  }
+  const metrics = development.macro?.metrics || [];
+  const observations = [
+    ...(development.production?.observations || []),
+    ...(development.tech?.observations || []),
+    ...(development.scouting?.observations || []),
+    ...(development.preparation?.observations || []),
+  ];
+  if (!metrics.length && !observations.length) {
+    (development.emptyStates || ['Экономических/технологических событий в этом интервале не обнаружено.'])
+      .forEach(item => lines.push(`  - Развитие: ${item}`));
+    return;
+  }
+  metrics.forEach(row => {
+    lines.push(`  - Развитие: ${metricLabel(row.metric)} ${Math.round(row.startValue || 0)} → ${Math.round(row.endValue || 0)} (${formatDelta(row.delta)})`);
+  });
+  observations.forEach(item => lines.push(`  - Развитие: ${item}`));
+}
+
+function metricLabel(metric) {
+  return {
+    armyValue: 'Стоимость армии',
+    economyProxy: 'Экономика',
+    supplyUsed: 'Занятый лимит',
+  }[metric] || metric;
+}
+
+function formatDelta(value) {
+  const rounded = Math.round(Number(value || 0));
+  return rounded > 0 ? `+${rounded}` : String(rounded);
 }
 
 function participantById(evidence, participantId) {
