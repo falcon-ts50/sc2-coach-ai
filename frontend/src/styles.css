@@ -336,6 +336,11 @@ main {
 }
 .combat-block.compact { padding: 14px; }
 .combat-block.compact .combat-title { grid-template-columns: 60px 1fr; }
+.interval-narrative {
+  margin: 0;
+  color: #dbe7f5;
+  line-height: 1.6;
+}
 .development-evidence {
   display: grid;
   gap: 12px;

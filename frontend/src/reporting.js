@@ -11,18 +11,21 @@ export function buildMarkdown(analysis) {
     '## История боёв', ''
   ];
   (analysis.combats || []).forEach((combat, index) => {
+    const participants = combat.participants || [];
+    const showUpgrades = participants.some(player => (player.upgrades || []).length);
+    const showTechnologies = participants.some(player => (player.technologies || []).length);
     lines.push(`### ${combat.ordinalLabel || `Бой ${index + 1}`} · ${clock(durationSeconds(combat.startedAt))}–${clock(durationSeconds(combat.endedAt))}`);
     lines.push(`${combat.initiator || 'Игрок'} атакует ${combat.opponent || 'соперника'}.`);
     if (combat.location) lines.push(`Координаты команды: ${combat.location}.`);
-    (combat.participants || []).forEach(player => {
+    participants.forEach(player => {
       lines.push('', `**${player.player}**`,
         `- Армия в начале: ${composition(player.armyBefore)}`,
         `- Новые юниты в интервале: ${composition(player.additions)}`,
         `- Боевые потери: ${composition(player.unitsLost)}`,
-        `- Армия в конце: ${composition(player.armyAfter)}`,
-        `- Грейды: ${listText(player.upgrades)}`,
-        `- Ключевые технологии: ${listText(player.technologies)}`,
-        `- Стоимость армии: ${Math.round(player.armyValueBefore || 0)} → ${Math.round(player.armyValueAfter || 0)}`,
+        `- Армия в конце: ${composition(player.armyAfter)}`);
+      if (showUpgrades) lines.push(`- Грейды: ${listText(player.upgrades)}`);
+      if (showTechnologies) lines.push(`- Ключевые технологии: ${listText(player.technologies)}`);
+      lines.push(`- Стоимость армии: ${Math.round(player.armyValueBefore || 0)} → ${Math.round(player.armyValueAfter || 0)}`,
         `- Сверка: ${reconciliationText(player)}`);
       pushOptionalComposition(lines, '- Рабочие', player.workersLost);
       pushOptionalComposition(lines, '- Здания', player.structuresLost);
@@ -74,22 +77,6 @@ export function narrativeAnalysisMarkdown(analysis) {
         lines.push(`  - ${participantName(participant)} (${relationshipText(participant)}): ${completenessText(series.completeness)}, ${lineStyleText(series.lineStyle)}, ${points.length} точек${first && last ? `, ${clock(durationSeconds(first.at))}=${Math.round(first.value)}, ${clock(durationSeconds(last.at))}=${Math.round(last.value)}` : ''}`);
       });
     });
-    lines.push('', '### Боевые таблицы доказательств', '');
-    (narrative.evidence.combats || []).forEach(combat => {
-      lines.push(`#### ${combat.label} · ${clock(durationSeconds(combat.startedAt))}–${clock(durationSeconds(combat.endedAt))}`);
-      (combat.sides || []).forEach(side => {
-        lines.push(`- ${side.label}: ${completenessText(side.completeness)}`);
-        pushUnitRows(lines, '  - Итого', side.totalRows || []);
-        (side.participants || []).forEach(player => {
-          lines.push(`  - ${player.player}: ${reconciliationStatusText(player.reconciliationStatus)}, ${completenessText(player.completeness)}`);
-          pushUnitRows(lines, '    - Боевые юниты', player.rows || []);
-          pushOptionalComposition(lines, '    - Рабочие', player.workerLosses);
-          pushOptionalComposition(lines, '    - Здания', player.structureLosses);
-          pushOptionalComposition(lines, '    - Потери статичной обороны', player.staticDefenseLosses);
-        });
-      });
-      (combat.notes || []).forEach(note => lines.push(`- Примечание: ${note}`));
-    });
   }
   if ((narrative.limitations || []).length) {
     lines.push('', '### Ограничения', '');
@@ -104,7 +91,28 @@ function pushUnitRows(lines, label, rows) {
     lines.push(`${label}: нет`);
     return;
   }
-  rows.forEach(row => lines.push(`${label}: ${row.unit}: старт ${row.startCount}, новые ${row.additions}, потери ${row.losses}, финиш ${row.endCount}, убийства ${countEvidence(row.creditedKills)}, ${reconciliationStatusText(row.reconciliationStatus) || completenessText(row.completeness)}`));
+  const showKills = rows.some(row => row.creditedKills && row.creditedKills.value != null);
+  rows.forEach(row => {
+    const kills = showKills ? `, убийства ${countEvidence(row.creditedKills)}` : '';
+    lines.push(`${label}: ${row.unit}: старт ${row.startCount}, новые ${row.additions}, потери ${row.losses}, финиш ${row.endCount}${kills}, ${reconciliationStatusText(row.reconciliationStatus) || completenessText(row.completeness)}`);
+  });
+}
+
+function pushCombatEvidence(lines, combats, indent = '') {
+  combats.forEach(combat => {
+    lines.push(`${indent}- Таблица боя: ${combat.label} · ${clock(durationSeconds(combat.startedAt))}–${clock(durationSeconds(combat.endedAt))}`);
+    (combat.sides || []).forEach(side => {
+      lines.push(`${indent}  - ${side.label}: ${completenessText(side.completeness)}`);
+      pushUnitRows(lines, `${indent}    - Итого`, side.totalRows || []);
+      (side.participants || []).forEach(player => {
+        lines.push(`${indent}    - ${player.player}: ${reconciliationStatusText(player.reconciliationStatus)}, ${completenessText(player.completeness)}`);
+        pushUnitRows(lines, `${indent}      - Боевые юниты`, player.rows || []);
+        pushOptionalComposition(lines, `${indent}      - Рабочие`, player.workerLosses);
+        pushOptionalComposition(lines, `${indent}      - Здания`, player.structureLosses);
+        pushOptionalComposition(lines, `${indent}      - Потери статичной обороны`, player.staticDefenseLosses);
+      });
+    });
+  });
 }
 
 function pushOptionalComposition(lines, label, value) {
@@ -120,6 +128,8 @@ function pushMatchFlow(lines, matchFlow) {
     const combat = interval.drilldown?.combat;
     if ((combat?.combatIds || []).length) {
       lines.push(`  - Бои: ${combat.combatIds.join(', ')}`);
+      if (combat.summary) lines.push(`  - Описание боя: ${combat.summary}`);
+      pushCombatEvidence(lines, combat.combats || [], '  ');
     } else {
       (combat?.emptyStates || ['Боёв в этом интервале не обнаружено.']).forEach(item => lines.push(`  - Бои: ${item}`));
     }

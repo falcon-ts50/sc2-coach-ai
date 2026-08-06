@@ -84,7 +84,46 @@ test('renders backend-owned narrative analysis without strategic inference', () 
             completeness: 'PARTIAL',
             summary: 'Бой и развитие.',
             drilldown: {
-              combat: { combatIds: ['combat-2'], emptyStates: [] },
+              combat: {
+                combatIds: ['combat-2'],
+                emptyStates: [],
+                summary: 'Frontdoor атакует Lulu. Во время эпизода: Lulu достроил/получил 16 x Zergling.',
+                combats: [{
+                  label: 'Бой 2',
+                  startedAt: 'PT373S',
+                  endedAt: 'PT423S',
+                  sides: [{
+                    label: 'Команда фокуса',
+                    completeness: 'COMPLETE',
+                    totalRows: [{
+                      unit: 'Zergling',
+                      startCount: 2,
+                      additions: 16,
+                      losses: 3,
+                      endCount: 15,
+                      creditedKills: { value: null, completeness: 'UNAVAILABLE' },
+                      reconciliationStatus: 'EXACT',
+                    }],
+                    participants: [{
+                      player: 'Lulu',
+                      reconciliationStatus: 'EXACT',
+                      completeness: 'COMPLETE',
+                      rows: [{
+                        unit: 'Zergling',
+                        startCount: 2,
+                        additions: 16,
+                        losses: 3,
+                        endCount: 15,
+                        creditedKills: { value: null, completeness: 'UNAVAILABLE' },
+                        reconciliationStatus: 'EXACT',
+                      }],
+                      workerLosses: { Drone: 1 },
+                      structureLosses: {},
+                      staticDefenseLosses: {},
+                    }],
+                  }],
+                }],
+              },
               development: {
                 macro: { metrics: [{ metric: 'armyValue', startValue: 100, endValue: 180, delta: 80 }] },
                 production: { observations: ['Lulu: новые боевые юниты стали доступны в интервале: +16 Zergling.'] },
@@ -185,9 +224,11 @@ test('renders backend-owned narrative analysis without strategic inference', () 
   assert.match(markdown, /Статус анализа: предварительный/);
   assert.match(markdown, /dragonDriver \(фокус\): данные полные, сплошная линия, 2 точек/);
   assert.match(markdown, /Lulu \(союзник\): частичные данные, пунктир, 2 точек/);
-  assert.match(markdown, /Zergling: старт 2, новые 16, потери 3, финиш 15, убийства нет данных, сверка точная/);
+  assert.match(markdown, /Описание боя: Frontdoor атакует Lulu/);
+  assert.match(markdown, /Таблица боя: Бой 2/);
+  assert.match(markdown, /Zergling: старт 2, новые 16, потери 3, финиш 15, сверка точная/);
   assert.match(markdown, /Рабочие: 1 × Drone/);
-  assert.doesNotMatch(markdown, /guaranteed win|caused|COMPLETE|PARTIAL|UNAVAILABLE|Strategic result|kills|PRELIMINARY|solid|dashed/i);
+  assert.doesNotMatch(markdown, /Боевые таблицы доказательств|убийства нет данных|guaranteed win|caused|COMPLETE|PARTIAL|UNAVAILABLE|Strategic result|kills|PRELIMINARY|solid|dashed/i);
 });
 
 test('distinguishes empty and unavailable values', () => {
