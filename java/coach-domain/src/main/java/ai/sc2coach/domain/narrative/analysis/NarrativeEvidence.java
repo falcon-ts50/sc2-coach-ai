@@ -185,7 +185,7 @@ public record NarrativeEvidence(
     ) {
         public UnitEvidenceRow {
             if (unit == null || unit.isBlank()) throw new IllegalArgumentException("unit is required");
-            creditedKills = creditedKills == null ? CountEvidence.unknown("Killer-unit identity недоступен в текущем combat DTO.") : creditedKills;
+            creditedKills = creditedKills == null ? CountEvidence.unknown("Авторство убийств по типу юнита недоступно в текущих боевых данных.") : creditedKills;
             completeness = completeness == null ? Completeness.UNAVAILABLE : completeness;
             reconciliationStatus = reconciliationStatus == null ? "UNKNOWN" : reconciliationStatus;
         }

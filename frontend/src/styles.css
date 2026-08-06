@@ -29,7 +29,7 @@ button {
 button:disabled { opacity: .45; cursor: default; }
 
 main {
-  width: min(980px, calc(100% - 32px));
+  width: min(1440px, calc(100% - 64px));
   margin: auto;
   padding: 52px 0 96px;
 }
@@ -96,9 +96,9 @@ main {
 }
 .report-section {
   display: grid;
-  grid-template-columns: 64px 1fr;
-  gap: 22px;
-  padding: 48px 8px;
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: 26px;
+  padding: 56px 0;
   border-bottom: 1px solid #243b53;
 }
 .report-section h2 { font-size: clamp(28px, 4vw, 42px); margin: 0 0 22px; letter-spacing: -.035em; }
@@ -201,8 +201,16 @@ main {
 .limitations { margin: 16px 0 0; padding-left: 20px; color: #91a7bf; line-height: 1.45; }
 
 .combat-list, .story-list { display: grid; gap: 18px; }
+.history-list { max-width: 920px; }
 .combat-block { background: #081522; border: 1px solid #233c55; border-radius: 18px; padding: 22px; }
+.combat-history-item {
+  background: #081522;
+  border: 1px solid #233c55;
+  border-radius: 14px;
+  padding: 18px;
+}
 .combat-title { display: grid; grid-template-columns: 72px 1fr; gap: 18px; border-bottom: 1px solid #20384f; padding-bottom: 16px; }
+.combat-history-item .combat-title { border-bottom: 0; padding-bottom: 0; }
 .combat-title time, .story-row time { font-size: 22px; font-weight: 850; color: #74d7ff; }
 .combat-title h3, .story-row h3 { margin: 0 0 7px; font-size: 22px; line-height: 1.2; }
 .combat-title p, .story-row p { margin: 0; color: #aebdd1; line-height: 1.55; }
@@ -234,6 +242,7 @@ main {
   color: #f0f7ff;
 }
 .combat-side small, .participant-evidence small {
+  margin-left: 8px;
   color: #b8cce2;
   font-size: 12px;
   font-weight: 750;
@@ -322,17 +331,20 @@ main {
 }
 .drilldown-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1.15fr) minmax(360px, .85fr);
   gap: 14px;
+  align-items: start;
 }
 .drilldown-section {
   min-width: 0;
   display: grid;
   gap: 12px;
+  align-content: start;
   padding: 14px;
   border: 1px solid #27425f;
   border-radius: 12px;
   background: #091724;
+  align-self: start;
 }
 .combat-block.compact { padding: 14px; }
 .combat-block.compact .combat-title { grid-template-columns: 60px 1fr; }
@@ -393,10 +405,14 @@ main {
 .actions { display: flex; gap: 10px; flex-wrap: wrap; }
 .report-footer small { color: #7890aa; text-align: right; }
 
+@media (max-width: 1100px) {
+  .drilldown-grid { grid-template-columns: 1fr; }
+}
+
 @media (max-width: 760px) {
+  main { width: min(100% - 28px, 720px); }
   main { padding-top: 34px; }
   .upload-panel form, .report-header, .narrative-grid { grid-template-columns: 1fr; }
-  .drilldown-grid { grid-template-columns: 1fr; }
   .report-section { grid-template-columns: 1fr; gap: 8px; padding: 36px 0; }
   .section-number { padding: 0; }
   .combat-title, .story-row { grid-template-columns: 58px 1fr; }
