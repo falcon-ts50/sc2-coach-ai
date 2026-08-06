@@ -159,25 +159,50 @@ The selected interval drilldown should be serialized by the backend:
 
 ```java
 record IntervalDrilldown(
-    List<String> combatIds,
-    List<CombatEvidence> combats,
-    MacroEvidence macro,
-    PreparationEvidence preparation,
-    List<String> emptyStates,
+    CombatDrilldown combat,
+    DevelopmentDrilldown development,
     List<String> limitations
 )
 ```
 
 Required semantics:
 
-- if no combats overlap the selected interval, say so explicitly;
-- show macro/preparation evidence when available;
+- every interval has both `combat` and `development` drilldown sections;
+- if no combats overlap the selected interval, `combat.emptyStates` says so explicitly;
+- if no economy, production, upgrade, tech, scouting or preparation evidence is available, `development.emptyStates` says so explicitly;
+- show macro/preparation/development evidence when available, even when the interval also contains combat;
 - do not fabricate economy, production or scouting data when the decoder does not expose it;
 - reuse existing `NarrativeEvidence.CombatEvidence` for combat drilldown.
 
-`MacroEvidence` and `PreparationEvidence` may start as compact records built from existing `MatchContext`,
-timeline and transcript-derived facts. If a data source is absent, the interval carries a limitation or empty state;
-it does not invent bases, production queues, hidden vision, intent or unit movement.
+Tentative section records:
+
+```java
+record CombatDrilldown(
+    List<String> combatIds,
+    List<CombatEvidence> combats,
+    List<String> emptyStates,
+    List<String> limitations
+)
+
+record DevelopmentDrilldown(
+    MacroEvidence macro,
+    ProductionEvidence production,
+    TechEvidence tech,
+    ScoutingEvidence scouting,
+    PreparationEvidence preparation,
+    List<String> emptyStates,
+    List<String> limitations
+)
+```
+
+`MacroEvidence`, `ProductionEvidence`, `TechEvidence`, `ScoutingEvidence` and `PreparationEvidence` may start as
+compact records built from existing `MatchContext`, timeline and transcript-derived facts. If a data source is absent,
+the relevant section carries a limitation or empty state; it does not invent bases, production queues, upgrades, hidden
+vision, intent or unit movement.
+
+Combat and development evidence are deliberately orthogonal. `Kind.COMBAT` means combat materially overlaps the interval;
+it does not suppress economy, production, tech or scouting evidence observed in the same time range. Likewise, a non-combat
+kind means no detected combat overlaps the interval, not that development evidence is guaranteed to exist.
 
 ## Combat table UX direction
 
@@ -219,7 +244,7 @@ The older Narrative phase model on that artifact has five phase intervals and le
 - 21:30-match end, where match duration is about 23:11.
 
 The APPLY implementation must record the new ACTUAL match-flow interval count, exact interval bounds, kind distribution,
-combat-to-interval mapping and no-combat interval empty states for this same artifact.
+combat-to-interval mapping, combat empty states and development empty states for this same artifact.
 
 ## Risks
 
