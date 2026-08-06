@@ -153,3 +153,13 @@ Narrative Analysis owns a continuous `MatchFlow` contract in addition to the ear
 Every interval serializes both combat and development drilldown sections. Combat evidence maps by interval overlap and may be empty. Development evidence may include available macro deltas, production/addition references, upgrades/technologies, scouting or preparation signals, and may also be empty. The UI and Markdown render those backend-owned sections and explicit empty states; they do not infer missing combats, exact production timing, full vision, player intent, or unobserved strategic meaning.
 
 Graph focus is interval-driven: overview mode keeps all participant series visible, while selecting an interval strongly mutes the non-selected time ranges and preserves the selected segment in normal colour/opacity across army, economy and supply charts.
+
+## ADR-017 — 0.9 dashboard is an additive A/B view
+
+**Status:** Accepted
+
+Version 0.9.0 introduces a desktop-first dashboard as an A/B report variant rather than replacing the 0.8 linear report in one step. The public API adds `narrativeAnalysis.dashboard` as a backend-owned view model for KPI summary metrics and evidence episodes. Existing `timeline`, `chart`, `evidence` and `matchFlow` fields remain serialized so the 0.8 report and exported artifacts keep working during comparison.
+
+React may switch between `0.8 report` and `0.9 dashboard`, choose the selected episode, and render metric tabs, but it must not compute analytical KPIs, infer strategic outcome, recompute combat totals, or invent map thumbnails. The dashboard links episodes back to MatchFlow intervals, combats and turning points using stable IDs; selected-episode detail owns the heavy tables while global combat history stays out of the dashboard view.
+
+The primary design target is desktop StarCraft II review on wide monitors. Mobile/narrow rendering is a fallback for not breaking the page, not the product acceptance driver for this release.

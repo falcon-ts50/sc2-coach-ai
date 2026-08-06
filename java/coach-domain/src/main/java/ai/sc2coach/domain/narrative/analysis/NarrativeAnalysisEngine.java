@@ -26,6 +26,9 @@ import ai.sc2coach.domain.narrative.analysis.NarrativeChartModel.Interval;
 import ai.sc2coach.domain.narrative.analysis.NarrativeChartModel.Marker;
 import ai.sc2coach.domain.narrative.analysis.NarrativeChartModel.Point;
 import ai.sc2coach.domain.narrative.analysis.NarrativeChartModel.Series;
+import ai.sc2coach.domain.narrative.analysis.NarrativeDashboard.EpisodeMetricDelta;
+import ai.sc2coach.domain.narrative.analysis.NarrativeDashboard.EvidenceEpisode;
+import ai.sc2coach.domain.narrative.analysis.NarrativeDashboard.SummaryMetric;
 import ai.sc2coach.domain.narrative.analysis.NarrativeEvidence.CombatEvidence;
 import ai.sc2coach.domain.narrative.analysis.NarrativeEvidence.CombatParticipantEvidence;
 import ai.sc2coach.domain.narrative.analysis.NarrativeEvidence.CombatSideEvidence;
@@ -84,6 +87,7 @@ public final class NarrativeAnalysisEngine {
         NarrativeChartModel chart = chart(snapshots, phases, events);
         NarrativeEvidence evidence = evidence(match, focus, snapshots, phases, events, input.combats());
         MatchFlow matchFlow = matchFlow(match, snapshots, phases, transitions, events, input.combats(), evidence);
+        NarrativeDashboard dashboard = dashboard(match, focus, snapshots, transitions, input.combats(), evidence, matchFlow);
         NarrativeSummary summary = summary(match, focus, team, phases, transitions, links);
 
         return new NarrativeAnalysis(
@@ -99,6 +103,7 @@ public final class NarrativeAnalysisEngine {
                 chart,
                 evidence,
                 matchFlow,
+                dashboard,
                 List.of(
                         "Narrative Analysis использует существующие детерминированные движки и не выводит стратегический результат.",
                         "Данные реплея не доказывают намерение или причинность; причинные связи используют осторожную формулировку порядка и вклада.",
@@ -547,6 +552,177 @@ public final class NarrativeAnalysisEngine {
                         "Расшифровка развития использует доступные изменения макро-показателей и доступность юнитов в окнах боёв; полные очереди производства, точные времена исследований и полное видение не восстановлены."
                 )
         );
+    }
+
+    private NarrativeDashboard dashboard(Match match, PlayerState focus, List<MatchStateSnapshot> snapshots,
+                                         List<StateTransition> transitions, List<Combat> combats,
+                                         NarrativeEvidence evidence, MatchFlow matchFlow) {
+        return new NarrativeDashboard(
+                "narrative-dashboard.v1",
+                summaryMetrics(match, focus, snapshots, transitions, combats),
+                evidenceEpisodes(matchFlow),
+                List.of(
+                        "Dashboard 0.9 использует backend-owned summary metrics и evidence episodes; React выбирает только вариант отображения.",
+                        "Фактический стратегический результат, точные убийства конкретных юнитов и пространственные миникарты не выводятся в 0.9.0."
+                )
+        );
+    }
+
+    private List<SummaryMetric> summaryMetrics(Match match, PlayerState focus, List<MatchStateSnapshot> snapshots,
+                                               List<StateTransition> transitions, List<Combat> combats) {
+        List<SummaryMetric> metrics = new ArrayList<>();
+        Duration end = matchEnd(match, snapshots, combats);
+        metrics.add(new SummaryMetric("officialResult", "Официальный результат", resultLabel(officialResult(focus)),
+                "официальные данные реплея", "", end, Duration.ZERO, end, Completeness.COMPLETE, List.of()));
+        metrics.add(new SummaryMetric("duration", "Длительность", clock(end), "", "", end, Duration.ZERO, end,
+                Completeness.COMPLETE, List.of()));
+        metrics.add(maxArmyMetric(snapshots));
+        metrics.add(largestCombatMetric(combats));
+        metrics.add(strongestSwingMetric(transitions));
+        return metrics.stream().filter(Objects::nonNull).toList();
+    }
+
+    private SummaryMetric maxArmyMetric(List<MatchStateSnapshot> snapshots) {
+        String player = "";
+        double value = 0;
+        Duration at = Duration.ZERO;
+        for (MatchStateSnapshot snapshot : snapshots) {
+            for (Map.Entry<String, MatchStateSnapshot.Metrics> entry : snapshot.playerMetrics().entrySet()) {
+                if (entry.getValue().armyValue() > value) {
+                    player = entry.getKey();
+                    value = entry.getValue().armyValue();
+                    at = snapshot.at();
+                }
+            }
+        }
+        return new SummaryMetric("maxArmyValue", "Пик армии", Math.round(value) + " ресурсов",
+                player, "ресурсы", at, at, at, value > 0 ? Completeness.COMPLETE : Completeness.UNAVAILABLE, List.of());
+    }
+
+    private SummaryMetric largestCombatMetric(List<Combat> combats) {
+        Combat best = combats.stream()
+                .max(Comparator.comparingInt(this::combatLossCount))
+                .orElse(null);
+        if (best == null) {
+            return new SummaryMetric("largestCombat", "Крупнейший бой", "нет данных", "", "",
+                    Duration.ZERO, Duration.ZERO, Duration.ZERO, Completeness.UNAVAILABLE, List.of());
+        }
+        return new SummaryMetric("largestCombat", "Крупнейший бой", combatLossCount(best) + " потерь",
+                best.ordinalLabel() == null ? best.id() : best.ordinalLabel(), "потери", best.startedAt(), best.startedAt(), best.endedAt(),
+                Completeness.COMPLETE, List.of("Считает подтверждённые потери по категориям, а не эффективность боя."));
+    }
+
+    private int combatLossCount(Combat combat) {
+        return combat.participants().stream()
+                .mapToInt(participant -> countValues(participant.unitsLost()) + countValues(participant.workersLost())
+                        + countValues(participant.structuresLost()) + countValues(participant.staticDefenseLost()))
+                .sum();
+    }
+
+    private int countValues(Map<String, Integer> values) {
+        return values == null ? 0 : values.values().stream()
+                .filter(Objects::nonNull)
+                .mapToInt(Integer::intValue)
+                .filter(value -> value > 0)
+                .sum();
+    }
+
+    private SummaryMetric strongestSwingMetric(List<StateTransition> transitions) {
+        StateTransition best = transitions.stream()
+                .max(Comparator.comparingDouble(transition -> Math.abs(transition.metricDelta().values().stream()
+                        .mapToDouble(Double::doubleValue)
+                        .sum())))
+                .orElse(null);
+        if (best == null) {
+            return new SummaryMetric("strongestSwing", "Главный сдвиг", "нет данных", "", "",
+                    Duration.ZERO, Duration.ZERO, Duration.ZERO, Completeness.UNAVAILABLE, List.of());
+        }
+        double delta = best.metricDelta().values().stream().mapToDouble(Double::doubleValue).sum();
+        return new SummaryMetric("strongestSwing", "Главный сдвиг", formatSigned(Math.round(delta)),
+                best.interpretation(), "", best.to(), best.from(), best.to(), Completeness.PARTIAL,
+                List.of("Сдвиг измерен по существующим transition snapshots и не является фактическим исходом."));
+    }
+
+    private List<EvidenceEpisode> evidenceEpisodes(MatchFlow matchFlow) {
+        List<EvidenceEpisode> episodes = new ArrayList<>();
+        for (MatchFlowInterval interval : matchFlow.intervals()) {
+            List<EpisodeMetricDelta> deltas = interval.delta().byParticipantId().entrySet().stream()
+                    .flatMap(entry -> {
+                        IntervalMetrics start = interval.startMetricsByParticipantId().getOrDefault(entry.getKey(), IntervalMetrics.unavailable());
+                        IntervalMetrics end = interval.endMetricsByParticipantId().getOrDefault(entry.getKey(), IntervalMetrics.unavailable());
+                        return List.of(
+                                episodeDelta(entry.getKey(), "Стоимость армии", start.armyValue(), end.armyValue(), entry.getValue().armyValueDelta(), "ресурсы"),
+                                episodeDelta(entry.getKey(), "Экономика", start.economyProxy(), end.economyProxy(), entry.getValue().economyProxyDelta(), "индекс"),
+                                episodeDelta(entry.getKey(), "Лимит", start.supplyUsed(), end.supplyUsed(), entry.getValue().supplyUsedDelta(), "лимит")
+                        ).stream();
+                    })
+                    .filter(delta -> Math.abs(delta.delta()) > 1)
+                    .toList();
+            List<String> turningPointIds = interval.eventIds().stream()
+                    .filter(id -> id.startsWith("turning-point-"))
+                    .toList();
+            episodes.add(new EvidenceEpisode(
+                    "episode-" + String.format("%03d", interval.ordinal()),
+                    interval.ordinal(),
+                    interval.title(),
+                    kindName(interval.kind()),
+                    interval.startedAt(),
+                    interval.endedAt(),
+                    episodeImportance(interval),
+                    interval.confidence(),
+                    interval.completeness(),
+                    interval.summary(),
+                    deltas,
+                    List.of(interval.id()),
+                    interval.combatIds(),
+                    turningPointIds,
+                    interval.limitations()
+            ));
+        }
+        return List.copyOf(episodes);
+    }
+
+    private EpisodeMetricDelta episodeDelta(String participantId, String label, double start, double end, double delta, String unit) {
+        return new EpisodeMetricDelta(participantId, label, start, end, delta, unit, Completeness.COMPLETE);
+    }
+
+    private double episodeImportance(MatchFlowInterval interval) {
+        double metricWeight = interval.delta().byParticipantId().values().stream()
+                .mapToDouble(delta -> Math.abs(delta.armyValueDelta()) / 1600.0
+                        + Math.abs(delta.economyProxyDelta()) / 1600.0
+                        + Math.abs(delta.supplyUsedDelta()) / 120.0)
+                .max()
+                .orElse(0);
+        double combatWeight = interval.combatIds().isEmpty() ? 0 : 0.25 + interval.combatIds().size() * 0.08;
+        return Math.min(1, 0.25 + metricWeight + combatWeight);
+    }
+
+    private String kindName(Kind kind) {
+        return switch (kind) {
+            case OPENING_BUILDUP -> "открытие";
+            case ECONOMIC_GROWTH -> "экономика";
+            case TECH_TRANSITION -> "технологии";
+            case ARMY_BUILDUP -> "армия";
+            case MAP_CONTROL_OR_SCOUTING -> "карта/разведка";
+            case PRESSURE_PREPARATION -> "подготовка";
+            case COMBAT -> "бой";
+            case RECOVERY -> "восстановление";
+            case REGROUPING_OR_LOW_ACTIVITY -> "перегруппировка";
+            case LOW_EVIDENCE -> "низкая доказательность";
+        };
+    }
+
+    private String resultLabel(String value) {
+        return switch (value) {
+            case "Win" -> "победа";
+            case "Loss" -> "поражение";
+            case "Tie" -> "ничья";
+            default -> "не определён";
+        };
+    }
+
+    private String formatSigned(long value) {
+        return value > 0 ? "+" + value : String.valueOf(value);
     }
 
     private TreeSet<Duration> coarseEpisodeBoundaries(List<MatchStateSnapshot> snapshots,

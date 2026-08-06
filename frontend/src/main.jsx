@@ -8,6 +8,7 @@ function App() {
   const [file, setFile] = useState(null);
   const [analysis, setAnalysis] = useState(null);
   const [focusPlayer, setFocusPlayer] = useState('');
+  const [reportVariant, setReportVariant] = useState('dashboard');
   const [status, setStatus] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -72,22 +73,220 @@ function App() {
       </div>
       {status && <p className="status">{status}</p>}
     </section>
-    {analysis && <Report analysis={analysis} focusPlayer={focusPlayer} setFocusPlayer={setFocusPlayer} rebuild={() => analyze(null, focusPlayer)} loading={loading} onDownload={downloadMarkdown} onSupportBundle={downloadSupportBundle} />}
+    {analysis && <Report analysis={analysis} focusPlayer={focusPlayer} setFocusPlayer={setFocusPlayer} rebuild={() => analyze(null, focusPlayer)} loading={loading} onDownload={downloadMarkdown} onSupportBundle={downloadSupportBundle} reportVariant={reportVariant} setReportVariant={setReportVariant} />}
   </main>;
 }
 
-function Report({ analysis, focusPlayer, setFocusPlayer, rebuild, loading, onDownload, onSupportBundle }) {
+function Report({ analysis, focusPlayer, setFocusPlayer, rebuild, loading, onDownload, onSupportBundle, reportVariant, setReportVariant }) {
+  const feed = analysis.coachFeed || {};
+  return <article className={`report report-${reportVariant}`}>
+    <section className="report-header panel"><div><span className="eyebrow">РАЗБОР ДЛЯ ИГРОКА</span><h2>{analysis.focusPlayer || focusPlayer}</h2><p>{feed.headline}</p></div><div className="perspective"><VersionSwitch value={reportVariant} onChange={setReportVariant} /><label>Для кого сделать отчёт</label><select value={focusPlayer} onChange={event => setFocusPlayer(event.target.value)}>{(analysis.players || []).map(player => <option key={player.pid} value={player.name}>{player.name} · {player.race}</option>)}</select><button disabled={loading || focusPlayer === analysis.focusPlayer} onClick={rebuild}>Перестроить отчёт</button></div></section>
+    {reportVariant === 'dashboard'
+      ? <DashboardReport analysis={analysis} />
+      : <ClassicReport analysis={analysis} />}
+    <footer className="report-footer panel"><div className="actions"><button onClick={onDownload}>Скачать Markdown</button><button onClick={onSupportBundle}>Скачать бандл для ИИ</button></div></footer>
+  </article>;
+}
+
+function VersionSwitch({ value, onChange }) {
+  return <div className="version-switch" role="group" aria-label="Версия отчёта">
+    <span>Версия сайта</span>
+    <button type="button" className={value === 'classic' ? 'active' : ''} onClick={() => onChange('classic')}>0.8 отчёт</button>
+    <button type="button" className={value === 'dashboard' ? 'active' : ''} onClick={() => onChange('dashboard')}>0.9 dashboard</button>
+  </div>;
+}
+
+function ClassicReport({ analysis }) {
   const feed = analysis.coachFeed || {};
   const narrativeCard = (feed.cards || []).find(card => card.title === 'Как развивался матч');
   const events = (feed.cards || []).filter(card => card !== narrativeCard);
-  return <article className="report">
-    <section className="report-header panel"><div><span className="eyebrow">РАЗБОР ДЛЯ ИГРОКА</span><h2>{analysis.focusPlayer || focusPlayer}</h2><p>{feed.headline}</p></div><div className="perspective"><label>Для кого сделать отчёт</label><select value={focusPlayer} onChange={event => setFocusPlayer(event.target.value)}>{(analysis.players || []).map(player => <option key={player.pid} value={player.name}>{player.name} · {player.race}</option>)}</select><button disabled={loading || focusPlayer === analysis.focusPlayer} onClick={rebuild}>Перестроить отчёт</button></div></section>
+  return <>
     <NarrativeAnalysisSection narrative={analysis.narrativeAnalysis} />
     <section className="report-section"><span className="section-number">02</span><div className="wide"><h2>История боёв</h2><div className="combat-list history-list">{(analysis.combats || []).length ? analysis.combats.map((combat, index) => <CombatHistoryBlock combat={combat} index={index} key={combat.id || `${combat.startedAt}-${index}`} />) : <p className="muted">Не удалось надёжно восстановить отдельные боевые эпизоды.</p>}</div></div></section>
     <section className="report-section"><span className="section-number">03</span><div className="wide"><h2>Переломные моменты</h2><div className="story-list">{events.map((card, index) => <div className="story-row" key={`${card.at}-${index}`}><time>{clock(durationSeconds(card.at))}</time><div><h3>{card.title}</h3><p>{card.explanation}</p><small>Уверенность {Math.round((card.confidence || 0) * 100)}%</small></div></div>)}</div></div></section>
     <section className="report-section"><span className="section-number">04</span><div className="wide"><h2>Что изменить в следующей игре</h2><ol className="next-actions">{(feed.nextGameRecommendations || []).map(item => <li key={item}>{item}</li>)}</ol></div></section>
-    <footer className="report-footer panel"><div className="actions"><button onClick={onDownload}>Скачать Markdown</button><button onClick={onSupportBundle}>Скачать бандл для ИИ</button></div></footer>
-  </article>;
+  </>;
+}
+
+function DashboardReport({ analysis }) {
+  const narrative = analysis.narrativeAnalysis;
+  const dashboard = narrative?.dashboard || {};
+  const evidence = narrative?.evidence || {};
+  const matchFlow = narrative?.matchFlow || {};
+  const intervals = matchFlow.intervals || [];
+  const episodes = dashboard.evidenceEpisodes?.length
+    ? dashboard.evidenceEpisodes
+    : intervals.map(interval => episodeFromInterval(interval));
+  const [selectedEpisodeId, setSelectedEpisodeId] = useState(episodes[0]?.id || '');
+  const [activeMetricId, setActiveMetricId] = useState('armyValue');
+  const [hoverAt, setHoverAt] = useState(null);
+  const selectedEpisode = episodes.find(episode => episode.id === selectedEpisodeId) || episodes[0] || null;
+  const selectedInterval = intervalForEpisode(selectedEpisode, intervals);
+  const metrics = evidence.metricComparisons?.length
+    ? evidence.metricComparisons
+    : legacyMetricComparisons(withOverallScoreSeries(narrative?.chart, narrative?.timeline?.snapshots || []), narrative || {});
+  const activeMetric = metrics.find(metric => metric.id === activeMetricId) || metrics[0];
+  const participants = evidence.participants || [];
+  const selectedRange = selectedEpisode ? { id: selectedEpisode.id, from: selectedEpisode.startedAt, to: selectedEpisode.endedAt } : null;
+  const selectEpisodeAt = at => {
+    const seconds = durationSeconds(at);
+    const episode = episodes.find(item => seconds >= durationSeconds(item.startedAt) && seconds < durationSeconds(item.endedAt));
+    if (episode) setSelectedEpisodeId(episode.id);
+  };
+
+  if (!narrative) return null;
+
+  return <section className="dashboard-report" aria-label="Dashboard 0.9">
+    <DashboardHeader analysis={analysis} narrative={narrative} metrics={dashboard.summaryMetrics || []} />
+    <div className="dashboard-grid">
+      <aside className="episode-rail">
+        <h3>Ключевые эпизоды</h3>
+        <div className="episode-list">{episodes.map(episode => <button className={episode.id === selectedEpisode?.id ? 'episode-card selected' : 'episode-card'} key={episode.id} onClick={() => setSelectedEpisodeId(episode.id)}>
+          <time>{clock(durationSeconds(episode.startedAt))}–{clock(durationSeconds(episode.endedAt))}</time>
+          <strong>{episode.title}</strong>
+          <span>{episode.summary}</span>
+          <small>{episode.category} · {Math.round((episode.importance || episode.confidence || 0) * 100)}%</small>
+        </button>)}</div>
+      </aside>
+      <section className="chart-workspace">
+        <div className="metric-tabs" role="tablist" aria-label="Метрика графика">
+          {metrics.map(metric => <button type="button" className={metric.id === activeMetric?.id ? 'active' : ''} key={metric.id} onClick={() => setActiveMetricId(metric.id)}>{metric.label}</button>)}
+        </div>
+        {activeMetric && <MetricComparisonChart metric={activeMetric} participants={participants} focuses={episodeFocuses(episodes)} selected={selectedRange} hoverAt={hoverAt} onHover={setHoverAt} onFocusAt={selectEpisodeAt} />}
+        <TimelineStrip episodes={episodes} selected={selectedEpisode} onSelect={setSelectedEpisodeId} />
+      </section>
+      <aside className="insight-column">
+        <InsightPanel title="Состав армий" lines={compositionInsights(selectedInterval)} />
+        <InsightPanel title="Потери по типам" lines={lossInsights(selectedInterval)} />
+        <InsightPanel title="Статус экономики" lines={economyInsights(selectedInterval)} />
+      </aside>
+      <section className="selected-episode-workspace">
+        <header>
+          <span className="eyebrow">ВЫБРАННЫЙ ЭПИЗОД</span>
+          <h2>{selectedEpisode?.title || 'Эпизод не выбран'}</h2>
+          {selectedEpisode && <p>{clock(durationSeconds(selectedEpisode.startedAt))}–{clock(durationSeconds(selectedEpisode.endedAt))}. {selectedEpisode.summary}</p>}
+        </header>
+        <EpisodeDeltas episode={selectedEpisode} participants={participants} />
+        <IntervalDrilldown interval={selectedInterval} />
+      </section>
+    </div>
+  </section>;
+}
+
+function DashboardHeader({ analysis, narrative, metrics }) {
+  const fallbackMetrics = [
+    { id: 'officialResult', label: 'Официальный результат', value: resultText(narrative.officialReplayResult), comparisonValue: 'официальные данные реплея' },
+    { id: 'duration', label: 'Длительность', value: clock(analysis.gameSeconds), comparisonValue: '' },
+  ];
+  const cards = (metrics.length ? metrics : fallbackMetrics).slice(0, 6);
+  return <section className="dashboard-header panel">
+    <div>
+      <span className="eyebrow">DASHBOARD 0.9</span>
+      <h2>{analysis.map || 'Матч StarCraft II'}</h2>
+      <p>{(analysis.players || []).map(player => `${player.name} · ${player.race}`).join('  /  ')}</p>
+    </div>
+    <div className="kpi-grid">{cards.map(metric => <div className="kpi-card" key={metric.id}>
+      <span>{metric.label}</span>
+      <strong>{metric.value || 'нет данных'}</strong>
+      {metric.comparisonValue && <small>{metric.comparisonValue}</small>}
+    </div>)}</div>
+  </section>;
+}
+
+function TimelineStrip({ episodes, selected, onSelect }) {
+  if (!episodes.length) return null;
+  const start = durationSeconds(episodes[0].startedAt);
+  const end = Math.max(start + 1, durationSeconds(episodes[episodes.length - 1].endedAt));
+  return <div className="timeline-strip" aria-label="Таймлайн эпизодов">
+    {episodes.map(episode => {
+      const left = (durationSeconds(episode.startedAt) - start) / (end - start) * 100;
+      const width = Math.max(3, (durationSeconds(episode.endedAt) - durationSeconds(episode.startedAt)) / (end - start) * 100);
+      return <button key={episode.id} className={episode.id === selected?.id ? 'selected' : ''} style={{ left: `${left}%`, width: `${width}%` }} onClick={() => onSelect(episode.id)} title={episode.title}>
+        <span>{clock(durationSeconds(episode.startedAt))}</span>
+      </button>;
+    })}
+  </div>;
+}
+
+function EpisodeDeltas({ episode, participants }) {
+  const deltas = (episode?.metricDeltas || []).filter(delta => Math.abs(Number(delta.delta || 0)) > 1).slice(0, 8);
+  if (!deltas.length) return <p className="muted">Для эпизода нет выраженных before/after-дельт.</p>;
+  const names = new Map((participants || []).map(participant => [participant.id, participant.displayName]));
+  return <div className="episode-deltas">{deltas.map((delta, index) => <div key={`${delta.participantId}-${delta.label}-${index}`}>
+    <span>{names.get(delta.participantId) || delta.participantId || 'Участник'}</span>
+    <strong>{delta.label}</strong>
+    <em>{formatDelta(delta.delta)} {delta.unit || ''}</em>
+  </div>)}</div>;
+}
+
+function InsightPanel({ title, lines }) {
+  const visible = (lines || []).filter(Boolean).slice(0, 5);
+  return <section className="insight-panel">
+    <h3>{title}</h3>
+    {visible.length ? <ul>{visible.map(line => <li key={line}>{line}</li>)}</ul> : <p className="muted">Нет выраженных данных в выбранном эпизоде.</p>}
+  </section>;
+}
+
+function episodeFromInterval(interval) {
+  return {
+    id: `episode-${interval.id}`,
+    title: interval.title,
+    category: kindText(interval.kind),
+    startedAt: interval.startedAt,
+    endedAt: interval.endedAt,
+    importance: interval.confidence,
+    confidence: interval.confidence,
+    completeness: interval.completeness,
+    summary: interval.summary,
+    metricDeltas: [],
+    relatedMatchFlowIntervalIds: [interval.id],
+    relatedCombatIds: interval.combatIds || [],
+  };
+}
+
+function intervalForEpisode(episode, intervals) {
+  if (!episode) return null;
+  const ids = episode.relatedMatchFlowIntervalIds || [];
+  return intervals.find(interval => ids.includes(interval.id))
+    || intervals.find(interval => durationSeconds(interval.startedAt) === durationSeconds(episode.startedAt))
+    || null;
+}
+
+function episodeFocuses(episodes) {
+  return episodes.map(episode => ({
+    id: `focus-${episode.id}`,
+    kind: (episode.relatedCombatIds || []).length ? 'COMBAT' : 'TURNING_POINT',
+    at: episode.startedAt,
+    from: episode.startedAt,
+    to: episode.endedAt,
+    sourceId: episode.id,
+  }));
+}
+
+function compositionInsights(interval) {
+  return (interval?.drilldown?.combat?.combats || []).flatMap(combat =>
+    (combat.sides || []).flatMap(side => (side.totalRows || [])
+      .filter(row => row.startCount || row.additions || row.endCount)
+      .slice(0, 3)
+      .map(row => `${side.label}: ${row.unit} ${row.startCount} → ${row.endCount}${row.additions ? `, новые ${row.additions}` : ''}`)));
+}
+
+function lossInsights(interval) {
+  return (interval?.drilldown?.combat?.combats || []).flatMap(combat =>
+    (combat.sides || []).flatMap(side => {
+      const unitLosses = (side.totalRows || []).filter(row => row.losses).map(row => `${row.losses} × ${row.unit}`);
+      const collateral = [
+        hasValues(side.workerLosses) ? `рабочие: ${composition(side.workerLosses)}` : '',
+        hasValues(side.structureLosses) ? `здания: ${composition(side.structureLosses)}` : '',
+        hasValues(side.staticDefenseLosses) ? `статичная оборона: ${composition(side.staticDefenseLosses)}` : '',
+      ].filter(Boolean);
+      return unitLosses.length || collateral.length ? [`${side.label}: ${[...unitLosses, ...collateral].join('; ')}`] : [];
+    }));
+}
+
+function economyInsights(interval) {
+  const rows = interval?.drilldown?.development?.macro?.metrics || [];
+  return rows.map(row => `${metricText(row.metric)}: ${Math.round(row.startValue || 0)} → ${Math.round(row.endValue || 0)} (${formatDelta(row.delta)})`);
 }
 
 function NarrativeAnalysisSection({ narrative }) {
