@@ -40,6 +40,32 @@ The report SHALL classify the full match timeline into deterministic adjacent in
 - THEN the range is labelled `LOW_EVIDENCE` or an equivalent explicit low-confidence category;
 - AND it is not omitted.
 
+## Requirement: Human-readable coarse episode segmentation
+
+The match flow SHALL expose human-readable coarse episodes rather than raw event-boundary slices.
+
+### Scenario: Normal-length match
+
+- GIVEN a normal-length benchmark replay with noisy ten-second metric snapshots and multiple short combats;
+- WHEN match-flow intervals are generated;
+- THEN the primary visible interval list targets 4-6 coarse episodes unless match duration or evidence quality makes fewer episodes more honest;
+- AND individual 4-20 second fights SHALL be attached as evidence inside a neighbouring or enclosing episode instead of becoming standalone visible intervals.
+
+### Scenario: Smoothed multi-metric boundaries
+
+- GIVEN army, economy and supply metrics for all known participants;
+- WHEN candidate episode boundaries are selected;
+- THEN the backend SHALL smooth noisy metric series before segmentation;
+- AND SHALL consider level, slope and accumulated trend features rather than only raw local spikes;
+- AND SHALL prefer boundaries where the smoothed multi-participant state changes regime.
+
+### Scenario: Minimum visible duration
+
+- GIVEN a generated interval shorter than the configured minimum readable duration;
+- WHEN the interval list is serialized;
+- THEN it SHALL be merged or avoided unless the whole replay is too short to support that threshold;
+- AND no visible card SHALL represent a few-second micro-slice in normal replays.
+
 ## Requirement: Non-combat interval classification
 
 The match flow SHALL classify non-combat periods when no fight is detected.
@@ -190,6 +216,27 @@ Combat evidence in interval drilldown SHALL be easier to compare than the curren
 - THEN those values appear on one row per unit type;
 - AND credited kills are shown only when supported;
 - AND unknown credited kills are rendered as unknown, not zero.
+
+### Scenario: Unknown kill attribution omitted from user tables
+
+- GIVEN credited kill attribution is unavailable for every row in a combat table;
+- WHEN combat evidence is rendered;
+- THEN the kill column SHALL be omitted from the user-facing table;
+- AND the report SHALL NOT repeat a no-data kill value for every row.
+
+### Scenario: Global combat history remains summary-only
+
+- GIVEN combat evidence tables exist for a detected fight;
+- WHEN the browser renders the global combat-history section;
+- THEN it SHALL show concise combat cards without the evidence tables;
+- AND the full combat tables SHALL appear in the selected interval drilldown instead.
+
+### Scenario: Empty participant-card rows are hidden by row type
+
+- GIVEN a participant-card row type such as upgrades is empty for every participant in the same combat card;
+- WHEN participant cards render;
+- THEN that row type SHALL be hidden for the card;
+- AND if at least one participant has a value, the row type MAY be shown for all participants to preserve comparison.
 
 ### Scenario: Collateral losses
 
