@@ -55,6 +55,27 @@ main {
   padding: 24px;
 }
 .upload-panel form { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 16px; }
+.upload-outcomes {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+  margin-top: 22px;
+  padding-top: 20px;
+  border-top: 1px solid #28425f;
+}
+.upload-outcomes div {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+.upload-outcomes strong {
+  color: #eef5ff;
+  font-size: 16px;
+}
+.upload-outcomes span {
+  color: #9eb0c6;
+  line-height: 1.45;
+}
 .dropzone {
   min-height: 108px;
   min-width: 0;
@@ -413,6 +434,7 @@ main {
   main { width: min(100% - 28px, 720px); }
   main { padding-top: 34px; }
   .upload-panel form, .report-header, .narrative-grid { grid-template-columns: 1fr; }
+  .upload-outcomes { grid-template-columns: 1fr; }
   .report-section { grid-template-columns: 1fr; gap: 8px; padding: 36px 0; }
   .section-number { padding: 0; }
   .combat-title, .story-row { grid-template-columns: 58px 1fr; }
