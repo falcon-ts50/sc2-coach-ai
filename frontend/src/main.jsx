@@ -40,7 +40,6 @@ function App() {
   }
 
   function downloadMarkdown() { downloadText(buildMarkdown(analysis), 'sc2-match-review.md'); }
-  function downloadTranscript() { downloadText(analysis.transcriptMarkdown, 'sc2-replay-transcript.md'); }
   async function downloadSupportBundle() {
     const zip = new JSZip();
     zip.file('report.md', buildMarkdown(analysis));
@@ -57,13 +56,27 @@ function App() {
         <label className="dropzone"><input type="file" accept=".SC2Replay" disabled={loading} onChange={e => setFile(e.target.files?.[0] || null)} /><strong>{file ? file.name : 'Выберите .SC2Replay'}</strong><span>Файл удаляется после анализа</span></label>
         <button disabled={!file || loading}>{loading ? 'Анализируем…' : 'Запустить анализ'}</button>
       </form>
+      <div className="upload-outcomes" aria-label="Что будет после анализа">
+        <div>
+          <strong>Анализ на сайте</strong>
+          <span>Ход матча, графики, интервалы, бои и экономика в интерактивном отчёте.</span>
+        </div>
+        <div>
+          <strong>Markdown-отчёт</strong>
+          <span>Текстовая расшифровка того же разбора, который виден на странице.</span>
+        </div>
+        <div>
+          <strong>Бандл для ИИ</strong>
+          <span>Архив с расшифровкой матча и данными анализа, чтобы передать его другой модели и получить рекомендации по игре.</span>
+        </div>
+      </div>
       {status && <p className="status">{status}</p>}
     </section>
-    {analysis && <Report analysis={analysis} focusPlayer={focusPlayer} setFocusPlayer={setFocusPlayer} rebuild={() => analyze(null, focusPlayer)} loading={loading} onDownload={downloadMarkdown} onTranscript={downloadTranscript} onSupportBundle={downloadSupportBundle} />}
+    {analysis && <Report analysis={analysis} focusPlayer={focusPlayer} setFocusPlayer={setFocusPlayer} rebuild={() => analyze(null, focusPlayer)} loading={loading} onDownload={downloadMarkdown} onSupportBundle={downloadSupportBundle} />}
   </main>;
 }
 
-function Report({ analysis, focusPlayer, setFocusPlayer, rebuild, loading, onDownload, onTranscript, onSupportBundle }) {
+function Report({ analysis, focusPlayer, setFocusPlayer, rebuild, loading, onDownload, onSupportBundle }) {
   const feed = analysis.coachFeed || {};
   const narrativeCard = (feed.cards || []).find(card => card.title === 'Как развивался матч');
   const events = (feed.cards || []).filter(card => card !== narrativeCard);
@@ -73,7 +86,7 @@ function Report({ analysis, focusPlayer, setFocusPlayer, rebuild, loading, onDow
     <section className="report-section"><span className="section-number">02</span><div className="wide"><h2>История боёв</h2><div className="combat-list history-list">{(analysis.combats || []).length ? analysis.combats.map((combat, index) => <CombatHistoryBlock combat={combat} index={index} key={combat.id || `${combat.startedAt}-${index}`} />) : <p className="muted">Не удалось надёжно восстановить отдельные боевые эпизоды.</p>}</div></div></section>
     <section className="report-section"><span className="section-number">03</span><div className="wide"><h2>Переломные моменты</h2><div className="story-list">{events.map((card, index) => <div className="story-row" key={`${card.at}-${index}`}><time>{clock(durationSeconds(card.at))}</time><div><h3>{card.title}</h3><p>{card.explanation}</p><small>Уверенность {Math.round((card.confidence || 0) * 100)}%</small></div></div>)}</div></div></section>
     <section className="report-section"><span className="section-number">04</span><div className="wide"><h2>Что изменить в следующей игре</h2><ol className="next-actions">{(feed.nextGameRecommendations || []).map(item => <li key={item}>{item}</li>)}</ol></div></section>
-    <footer className="report-footer panel"><div className="actions"><button onClick={onDownload}>Скачать отчёт</button><button onClick={onTranscript}>Расшифровка для ИИ</button><button onClick={onSupportBundle}>Пакет диагностики</button></div></footer>
+    <footer className="report-footer panel"><div className="actions"><button onClick={onDownload}>Скачать Markdown</button><button onClick={onSupportBundle}>Скачать бандл для ИИ</button></div></footer>
   </article>;
 }
 
