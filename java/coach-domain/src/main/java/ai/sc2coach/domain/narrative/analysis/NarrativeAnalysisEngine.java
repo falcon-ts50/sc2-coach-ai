@@ -222,7 +222,7 @@ public final class NarrativeAnalysisEngine {
                     metrics(player),
                     all,
                     0.86,
-                    List.of("Экономика здесь — прокси по рабочим и доходу из существующего MatchContext, а не полная модель банка и трат.")
+                    List.of("Экономика здесь — приближённая оценка по рабочим и доходу, а не полная модель банка и трат.")
             ));
             index++;
         }
@@ -471,13 +471,13 @@ public final class NarrativeAnalysisEngine {
                 snapshots.getFirst().at(),
                 snapshots.getLast().at(),
                 List.of(
-                        new Series("armyValue", "Стоимость армии", "resources", "MatchContext.army.absoluteValue", Completeness.COMPLETE, army),
-                        new Series("economyProxy", "Экономика", "proxy", "MatchContext.economy.absoluteValue", Completeness.PARTIAL, economy),
-                        new Series("supplyUsed", "Занятый лимит", "supply", "MatchContext.supply.absoluteValue", Completeness.PARTIAL, supply)
+                        new Series("armyValue", "Стоимость армии", "ресурсы", "MatchContext.army.absoluteValue", Completeness.COMPLETE, army),
+                        new Series("economyProxy", "Экономика", "индекс", "MatchContext.economy.absoluteValue", Completeness.PARTIAL, economy),
+                        new Series("supplyUsed", "Занятый лимит", "лимит", "MatchContext.supply.absoluteValue", Completeness.PARTIAL, supply)
                 ),
                 markers,
                 intervals,
-                List.of("Экономика и лимит — context proxies; replay response не содержит полные ряды баз, очередей производства или трат банка.")
+                List.of("Экономика и лимит рассчитаны как приближённые показатели; данные реплея не содержат полные ряды баз, очередей производства или трат банка.")
         );
     }
 
@@ -543,7 +543,7 @@ public final class NarrativeAnalysisEngine {
                 intervals,
                 combats.stream().map(Combat::id).toList(),
                 List.of(
-                        "Ход матча построен как человекочитаемые крупные эпизоды по сглаженным многомерным рядам MatchContext; короткие бои и микрособытия становятся evidence внутри эпизода, а не отдельными карточками.",
+                        "Ход матча построен как человекочитаемые крупные эпизоды по сглаженным многомерным рядам; короткие бои и микрособытия становятся доказательствами внутри эпизода, а не отдельными карточками.",
                         "Расшифровка развития использует доступные изменения макро-показателей и доступность юнитов в окнах боёв; полные очереди производства, точные времена исследований и полное видение не восстановлены."
                 )
         );
@@ -945,7 +945,7 @@ public final class NarrativeAnalysisEngine {
                 combatIds.isEmpty() ? List.of("Боёв в этом интервале не обнаружено.") : List.of(),
                 combatEvidence.size() == combatIds.size()
                         ? List.of()
-                        : List.of("У части пересекающихся боёв нет подробных строк NarrativeEvidence."),
+                        : List.of("У части пересекающихся боёв нет подробных строк боевой расшифровки."),
                 combatNarrative(overlappingCombats)
         );
         DevelopmentDrilldown development = developmentDrilldown(from, to, overlappingCombats, startMetrics, endMetrics, delta, snapshotIds);
@@ -972,7 +972,7 @@ public final class NarrativeAnalysisEngine {
                 ? List.of()
                 : List.of("Экономических, производственных, технологических или разведывательных событий в этом интервале не обнаружено.");
         List<String> limitations = new ArrayList<>();
-        limitations.add("Полные очереди производства, точные времена исследований и полное видение недоступны в текущем replay response.");
+        limitations.add("Полные очереди производства, точные времена исследований и полное видение недоступны в текущих данных реплея.");
         limitations.addAll(macro.limitations());
         limitations.addAll(production.limitations());
         limitations.addAll(tech.limitations());
@@ -1019,7 +1019,7 @@ public final class NarrativeAnalysisEngine {
         }
         return new ProductionEvidence(observations, observations.isEmpty()
                 ? List.of()
-                : List.of("Боевые пополнения сохраняют смысл ADR-012: юниты стали доступны в интервале; локальное участие в конкретной точке боя не утверждается."));
+                : List.of("Боевые пополнения означают, что юниты стали доступны в интервале; точное участие в конкретной точке боя без пространственных данных не утверждается."));
     }
 
     private TechEvidence techEvidence(List<Combat> overlappingCombats) {
@@ -1053,9 +1053,62 @@ public final class NarrativeAnalysisEngine {
 
     private String combatNarrative(List<Combat> combats) {
         if (combats.isEmpty()) return "";
+        if (combats.size() > 1) return combinedCombatNarrative(combats);
         return combats.stream()
                 .map(this::combatNarrative)
                 .collect(Collectors.joining(" "));
+    }
+
+    private String combinedCombatNarrative(List<Combat> combats) {
+        List<String> parts = new ArrayList<>();
+        String engagements = combats.stream()
+                .map(combat -> {
+                    String attacker = combat.initiator() == null || combat.initiator().isBlank() ? "Инициатор" : combat.initiator();
+                    String defender = combat.opponent() == null || combat.opponent().isBlank() ? "соперника" : combat.opponent();
+                    return attacker + " атакует " + defender;
+                })
+                .distinct()
+                .collect(Collectors.joining("; "));
+        parts.add("В эпизод вошло боёв: " + combats.size() + (engagements.isBlank() ? "." : " — " + engagements + "."));
+        Map<String, Map<String, Integer>> additionsByPlayer = aggregateByPlayer(combats, Combat.Participant::additions);
+        if (!additionsByPlayer.isEmpty()) {
+            parts.add("Пополнения во время эпизода: " + playerComposition(additionsByPlayer) + ".");
+        }
+        Map<String, Map<String, Integer>> unitLossesByPlayer = aggregateByPlayer(combats, Combat.Participant::unitsLost);
+        if (!unitLossesByPlayer.isEmpty()) {
+            parts.add("Боевые потери: " + playerComposition(unitLossesByPlayer) + ".");
+        }
+        Map<String, Map<String, Integer>> workerLossesByPlayer = aggregateByPlayer(combats, Combat.Participant::workersLost);
+        if (!workerLossesByPlayer.isEmpty()) {
+            parts.add("Потери рабочих: " + playerComposition(workerLossesByPlayer) + ".");
+        }
+        Map<String, Map<String, Integer>> structureLossesByPlayer = aggregateByPlayer(combats, Combat.Participant::structuresLost);
+        if (!structureLossesByPlayer.isEmpty()) {
+            parts.add("Потери зданий: " + playerComposition(structureLossesByPlayer) + ".");
+        }
+        return String.join(" ", parts);
+    }
+
+    private Map<String, Map<String, Integer>> aggregateByPlayer(List<Combat> combats,
+                                                                java.util.function.Function<Combat.Participant, Map<String, Integer>> extractor) {
+        Map<String, Map<String, Integer>> result = new LinkedHashMap<>();
+        for (Combat combat : combats) {
+            for (Combat.Participant participant : combat.participants()) {
+                Map<String, Integer> values = extractor.apply(participant);
+                if (!hasValues(values)) continue;
+                Map<String, Integer> target = result.computeIfAbsent(participant.player(), ignored -> new LinkedHashMap<>());
+                values.forEach((unit, count) -> {
+                    if (count != null && count > 0) target.merge(unit, count, Integer::sum);
+                });
+            }
+        }
+        return result;
+    }
+
+    private String playerComposition(Map<String, Map<String, Integer>> valuesByPlayer) {
+        return valuesByPlayer.entrySet().stream()
+                .map(entry -> entry.getKey() + ": " + compactComposition(entry.getValue()))
+                .collect(Collectors.joining("; "));
     }
 
     private String combatNarrative(Combat combat) {
@@ -1171,7 +1224,7 @@ public final class NarrativeAnalysisEngine {
                 evidenceFocuses(phases, events),
                 combatEvidence(combats, participants, focus),
                 List.of(
-                        "Пополнения сохраняют смысл ADR-012: юниты стали доступны в интервале; локальное участие не утверждается без пространственных evidence."
+                        "Пополнения означают, что юниты стали доступны в интервале; локальное участие не утверждается без пространственных данных."
                 )
         );
     }
@@ -1232,11 +1285,11 @@ public final class NarrativeAnalysisEngine {
 
     private List<MetricComparison> metricComparisons(List<ParticipantIdentity> participants, List<MatchStateSnapshot> snapshots) {
         return List.of(
-                metricComparison("armyValue", "Стоимость армии", "resources", "MatchContext.playerMetrics.armyValue",
+                metricComparison("armyValue", "Стоимость армии", "ресурсы", "MatchContext.playerMetrics.armyValue",
                         Completeness.COMPLETE, participants, snapshots, MatchStateSnapshot.Metrics::armyValue),
-                metricComparison("economyProxy", "Экономика", "proxy", "MatchContext.playerMetrics.economyProxy",
+                metricComparison("economyProxy", "Экономика", "индекс", "MatchContext.playerMetrics.economyProxy",
                         Completeness.PARTIAL, participants, snapshots, MatchStateSnapshot.Metrics::economyProxy),
-                metricComparison("supplyUsed", "Занятый лимит", "supply", "MatchContext.playerMetrics.supplyUsed",
+                metricComparison("supplyUsed", "Занятый лимит", "лимит", "MatchContext.playerMetrics.supplyUsed",
                         Completeness.PARTIAL, participants, snapshots, MatchStateSnapshot.Metrics::supplyUsed)
         );
     }
@@ -1386,7 +1439,7 @@ public final class NarrativeAnalysisEngine {
                     count(participant.additions(), unit),
                     count(participant.unitsLost(), unit),
                     count(participant.armyAfter(), unit),
-                    CountEvidence.unknown("Killer-unit identity недоступен в текущем combat evidence; неизвестно не равно нулю."),
+                    CountEvidence.unknown("Авторство убийств по типу юнита недоступно в текущих боевых данных; неизвестное значение не считается нулём."),
                     exact ? Completeness.COMPLETE : Completeness.PARTIAL,
                     exact ? "EXACT" : "PARTIAL"
             ));
@@ -1444,7 +1497,7 @@ public final class NarrativeAnalysisEngine {
                 }
             }
             rows.add(new UnitEvidenceRow(unit, start, additions, losses, end,
-                    CountEvidence.unknown("Командные убийства недоступны без attribution по killer-unit."),
+                    CountEvidence.unknown("Командные убийства недоступны без привязки убийств к типу юнита."),
                     partial ? Completeness.PARTIAL : Completeness.COMPLETE,
                     partial ? "PARTIAL" : "EXACT"));
         }
