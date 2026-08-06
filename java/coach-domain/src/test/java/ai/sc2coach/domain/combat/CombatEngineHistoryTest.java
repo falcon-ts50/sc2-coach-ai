@@ -3,6 +3,7 @@ package ai.sc2coach.domain.combat;
 import ai.sc2coach.domain.ReplayAnalysis;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -15,22 +16,22 @@ class CombatEngineHistoryTest {
         ReplayAnalysis analysis = analysis(
                 players("Frontdoor", "Lulu"),
                 List.of(
-                        birth(80, 2, "Zergling"),
-                        birth(81, 2, "Zergling"),
+                        birth(80, 2, "Marine"),
+                        birth(81, 2, "Marine"),
                         command(100, 1, "Attack"),
-                        births(105, 2, "Zergling", 16),
-                        death(110, "Zergling", "Lulu", "Frontdoor"),
-                        death(111, "Zergling", "Lulu", "Frontdoor"),
-                        death(112, "Zergling", "Lulu", "Frontdoor")
+                        births(105, 2, "Marine", 16),
+                        death(110, "Marine", "Lulu", "Frontdoor"),
+                        death(111, "Marine", "Lulu", "Frontdoor"),
+                        death(112, "Marine", "Lulu", "Frontdoor")
                 )
         );
 
         Combat.Participant lulu = participant(new CombatEngine().detect(analysis, "Lulu").getFirst(), "Lulu");
 
-        assertThat(lulu.armyBefore()).containsEntry("Zergling", 2);
-        assertThat(lulu.additions()).containsEntry("Zergling", 16);
-        assertThat(lulu.unitsLost()).containsEntry("Zergling", 3);
-        assertThat(lulu.armyAfter()).containsEntry("Zergling", 15);
+        assertThat(lulu.armyBefore()).containsEntry("Marine", 2);
+        assertThat(lulu.additions()).containsEntry("Marine", 16);
+        assertThat(lulu.unitsLost()).containsEntry("Marine", 3);
+        assertThat(lulu.armyAfter()).containsEntry("Marine", 15);
         assertThat(lulu.reconciliationStatus()).isEqualTo(Combat.ReconciliationStatus.EXACT);
         assertThat(lulu.reconciliationIssues()).isEmpty();
     }
@@ -86,13 +87,51 @@ class CombatEngineHistoryTest {
         Combat combat = new CombatEngine().detect(analysis, "Alpha").getFirst();
 
         assertThat(combat.ordinalLabel()).isEqualTo("Бой 1");
-        assertThat(combat.id()).startsWith("combat-01-095-145-");
+        assertThat(combat.id()).startsWith("combat-01-095-126-");
         assertThat(combat.participants()).extracting(Combat.Participant::player)
                 .contains("Alpha", "Bravo", "Charlie", "Delta");
         assertThat(participant(combat, "Charlie").unitsLost()).containsEntry("Marine", 1);
         assertThat(participant(combat, "Delta").unitsLost()).containsEntry("Marauder", 1);
         assertThat(participant(combat, "Alpha").unitsLost()).isEmpty();
         assertThat(participant(combat, "Bravo").unitsLost()).isEmpty();
+    }
+
+    @Test
+    void coversLateDeathsEvenAfterManyEarlierAttackWindows() {
+        List<ReplayAnalysis.TimelineEvent> events = new ArrayList<>();
+        events.add(births(90, 1, "Marine", 8));
+        for (int index = 0; index < 8; index++) {
+            double startedAt = 100 + index * 60;
+            events.add(command(startedAt, 2, "Attack"));
+            events.add(death(startedAt + 5, "Marine", "Frontdoor", "dragonDriver"));
+        }
+        events.add(births(1000, 1, "Battlecruiser", 7));
+        events.add(death(1041, "Battlecruiser", "Frontdoor", "dragonDriver"));
+
+        List<Combat> combats = new CombatEngine().detect(analysis(players("Frontdoor", "dragonDriver"), events), "dragonDriver");
+
+        assertThat(combats).anySatisfy(combat ->
+                assertThat(participant(combat, "Frontdoor").unitsLost()).containsEntry("Battlecruiser", 1));
+    }
+
+    @Test
+    void includesTeamMateCombatWhenFocusPlayerIsNotPhysicallyPresent() {
+        ReplayAnalysis analysis = analysis(
+                List.of(
+                        player(1, "Frontdoor", 1),
+                        player(2, "dragonDriver", 2),
+                        player(3, "Lulu", 2)
+                ),
+                List.of(
+                        births(90, 1, "Battlecruiser", 2),
+                        death(110, "Battlecruiser", "Frontdoor", "Lulu")
+                )
+        );
+
+        List<Combat> combats = new CombatEngine().detect(analysis, "dragonDriver");
+
+        assertThat(combats).singleElement().satisfies(combat ->
+                assertThat(participant(combat, "Frontdoor").unitsLost()).containsEntry("Battlecruiser", 1));
     }
 
     private static Combat.Participant participant(Combat combat, String player) {

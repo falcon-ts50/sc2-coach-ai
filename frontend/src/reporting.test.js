@@ -35,8 +35,8 @@ test('renders chronological combat history with additions', () => {
 
   assert.match(markdown, /## История боёв/);
   assert.match(markdown, /### Бой 1 · 1:35–2:25/);
-  assert.match(markdown, /Новые юниты в интервале: 16 × Zergling/);
-  assert.match(markdown, /Сверка: точная/);
+  assert.match(markdown, /Потери: Lulu: 3 × Zergling/);
+  assert.doesNotMatch(markdown, /Новые юниты в интервале|Сверка: точная|Армия в начале/);
 });
 
 test('renders backend-owned narrative analysis without strategic inference', () => {
@@ -226,9 +226,9 @@ test('renders backend-owned narrative analysis without strategic inference', () 
   assert.match(markdown, /Lulu \(союзник\): частичные данные, пунктир, 2 точек/);
   assert.match(markdown, /Описание боя: Frontdoor атакует Lulu/);
   assert.match(markdown, /Таблица боя: Бой 2/);
-  assert.match(markdown, /Zergling: старт 2, новые 16, потери 3, финиш 15, сверка точная/);
+  assert.match(markdown, /Zergling: старт 2, новые 16, потери 3, финиш 15/);
   assert.match(markdown, /Рабочие: 1 × Drone/);
-  assert.doesNotMatch(markdown, /Боевые таблицы доказательств|убийства нет данных|guaranteed win|caused|COMPLETE|PARTIAL|UNAVAILABLE|Strategic result|kills|PRELIMINARY|solid|dashed/i);
+  assert.doesNotMatch(markdown, /Боевые таблицы доказательств|убийства нет данных|guaranteed win|caused|COMPLETE|PARTIAL|UNAVAILABLE|Strategic result|kills|PRELIMINARY|solid|dashed|сверка точная/i);
 });
 
 test('distinguishes empty and unavailable values', () => {

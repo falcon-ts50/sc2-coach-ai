@@ -70,10 +70,10 @@ function Report({ analysis, focusPlayer, setFocusPlayer, rebuild, loading, onDow
   return <article className="report">
     <section className="report-header panel"><div><span className="eyebrow">РАЗБОР ДЛЯ ИГРОКА</span><h2>{analysis.focusPlayer || focusPlayer}</h2><p>{feed.headline}</p></div><div className="perspective"><label>Для кого сделать отчёт</label><select value={focusPlayer} onChange={event => setFocusPlayer(event.target.value)}>{(analysis.players || []).map(player => <option key={player.pid} value={player.name}>{player.name} · {player.race}</option>)}</select><button disabled={loading || focusPlayer === analysis.focusPlayer} onClick={rebuild}>Перестроить отчёт</button></div></section>
     <NarrativeAnalysisSection narrative={analysis.narrativeAnalysis} />
-    <section className="report-section"><span className="section-number">02</span><div className="wide"><h2>История боёв</h2><div className="combat-list">{(analysis.combats || []).length ? analysis.combats.map((combat, index) => <CombatBlock combat={combat} index={index} key={combat.id || `${combat.startedAt}-${index}`} />) : <p className="muted">Не удалось надёжно восстановить отдельные боевые эпизоды.</p>}</div></div></section>
+    <section className="report-section"><span className="section-number">02</span><div className="wide"><h2>История боёв</h2><div className="combat-list history-list">{(analysis.combats || []).length ? analysis.combats.map((combat, index) => <CombatHistoryBlock combat={combat} index={index} key={combat.id || `${combat.startedAt}-${index}`} />) : <p className="muted">Не удалось надёжно восстановить отдельные боевые эпизоды.</p>}</div></div></section>
     <section className="report-section"><span className="section-number">03</span><div className="wide"><h2>Переломные моменты</h2><div className="story-list">{events.map((card, index) => <div className="story-row" key={`${card.at}-${index}`}><time>{clock(durationSeconds(card.at))}</time><div><h3>{card.title}</h3><p>{card.explanation}</p><small>Уверенность {Math.round((card.confidence || 0) * 100)}%</small></div></div>)}</div></div></section>
     <section className="report-section"><span className="section-number">04</span><div className="wide"><h2>Что изменить в следующей игре</h2><ol className="next-actions">{(feed.nextGameRecommendations || []).map(item => <li key={item}>{item}</li>)}</ol></div></section>
-    <footer className="report-footer panel"><div className="actions"><button onClick={onDownload}>Скачать отчёт</button><button onClick={onTranscript}>Расшифровка для ИИ</button><button onClick={onSupportBundle}>Support bundle</button></div><small>Analysis ID: {analysis.diagnostics?.analysisId || '—'} · {analysis.diagnostics?.applicationVersion || '—'} · {analysis.diagnostics?.totalTimeMs || 0} мс</small></footer>
+    <footer className="report-footer panel"><div className="actions"><button onClick={onDownload}>Скачать отчёт</button><button onClick={onTranscript}>Расшифровка для ИИ</button><button onClick={onSupportBundle}>Пакет диагностики</button></div></footer>
   </article>;
 }
 
@@ -111,7 +111,7 @@ function NarrativeAnalysisSection({ narrative }) {
   return <section className="report-section"><span className="section-number">01</span><div className="wide">
     <h2>Ход матча</h2>
     <div className="narrative-summary">
-      <p className="lead">Официальный результат для {narrative.focusPlayer || 'игрока'}: <strong>{narrative.officialReplayResult || 'не определён'}</strong>.</p>
+      <p className="lead">Официальный результат для {narrative.focusPlayer || 'игрока'}: <strong>{resultText(narrative.officialReplayResult)}</strong>.</p>
       <dl className="summary-facts"><dt>Команда</dt><dd>{team}</dd></dl>
     </div>
     <div className="phase-list">{intervals.map(interval => {
@@ -120,7 +120,7 @@ function NarrativeAnalysisSection({ narrative }) {
       <time>{clock(durationSeconds(interval.startedAt))}–{clock(durationSeconds(interval.endedAt))}</time>
       <strong>{interval.title}</strong>
       <span>{interval.summary}</span>
-      <small>{kindText(interval.kind)} · {completenessText(interval.completeness)} · {Math.round((interval.confidence || 0) * 100)}%</small>
+      <small>{intervalMetaText(interval)}</small>
     </button>;
     })}</div>
     <div className="evidence-legend">{participants.map((participant, index) => <span className={`legend-item ${participant.relationship?.toLowerCase() || 'unknown'}`} key={participant.id}><i style={{ background: participantColor(index) }} />{participant.displayName}<small>{relationshipText(participant)}</small></span>)}</div>
@@ -189,7 +189,7 @@ function MetricComparisonChart({ metric, participants, focuses, selected, hoverA
   };
 
   return <section className="chart-card">
-    <header className="chart-title"><h3>{metric.label}</h3><span>{metric.unit || ''} · {completenessText(metric.completeness)}</span></header>
+    <header className="chart-title"><h3>{metric.label}</h3><span>{metricMetaText(metric)}</span></header>
     <div className="chart-scroll">
       <svg className="narrative-chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`${metric.label} по времени матча`} onPointerMove={pointerMove} onPointerLeave={() => onHover(null)}>
         {selected && <rect className="phase-band active" x={Math.min(focusFrom, focusTo)} y={top} width={Math.max(2, Math.abs(focusTo - focusFrom))} height={plotHeight} />}
@@ -298,13 +298,35 @@ function CombatBlock({ combat, index }) {
   </section>;
 }
 
+function CombatHistoryBlock({ combat, index }) {
+  const participants = combat.participants || [];
+  const losses = participants
+    .map(player => {
+      const parts = [
+        composition(player.unitsLost),
+        hasValues(player.workersLost) ? `рабочие: ${composition(player.workersLost)}` : '',
+        hasValues(player.structuresLost) ? `здания: ${composition(player.structuresLost)}` : '',
+        hasValues(player.staticDefenseLost) ? `статичная оборона: ${composition(player.staticDefenseLost)}` : '',
+      ].filter(Boolean).filter(value => value !== 'нет');
+      return parts.length ? `${player.player}: ${parts.join('; ')}` : '';
+    })
+    .filter(Boolean);
+  return <section className="combat-history-item">
+    <div className="combat-title"><time>{clock(durationSeconds(combat.startedAt))}</time><div>
+      <h3>{combat.ordinalLabel || `Бой ${index + 1}`} · {combat.initiator || 'Игрок'} атакует {combat.opponent || 'соперника'}</h3>
+      <p>{clock(durationSeconds(combat.startedAt))}–{clock(durationSeconds(combat.endedAt))}{combat.location ? `. Координаты команды: ${combat.location}` : ''}.</p>
+      {losses.length > 0 && <p>Потери: {losses.join('. ')}.</p>}
+    </div></div>
+  </section>;
+}
+
 function CombatEvidenceTable({ evidence }) {
   return <div className="combat-evidence">
     {(evidence.sides || []).map(side => <section className="combat-side" key={side.id}>
-      <h4>{side.label} <small>{completenessText(side.completeness)}</small></h4>
+      <h4>{side.label}{nonCompleteBadge(side.completeness)}</h4>
       <UnitEvidenceTable rows={side.totalRows || []} caption="Итого по стороне" />
       {(side.participants || []).map(participant => <div className="participant-evidence" key={participant.participantId}>
-        <h5>{participant.player} <small>{reconciliationStatusText(participant.reconciliationStatus)}</small></h5>
+        <h5>{participant.player}{reconciliationBadge(participant.reconciliationStatus, participant.completeness)}</h5>
         <UnitEvidenceTable rows={participant.rows || []} caption="Боевые юниты" />
         {hasAnyValues(participant.workerLosses, participant.structureLosses, participant.staticDefenseLosses) && <dl className="collateral-losses">
           {hasValues(participant.workerLosses) && <><dt>Рабочие</dt><dd>{composition(participant.workerLosses)}</dd></>}
@@ -325,7 +347,7 @@ function UnitEvidenceTable({ rows, caption }) {
       <caption>{caption}</caption>
       <thead><tr><th>Юнит</th><th>Старт</th><th>Новые</th><th>Потери</th><th>Финиш</th>{showKills && <th>Убийства</th>}</tr></thead>
       <tbody>{rows.map(row => <tr key={row.unit}>
-        <th scope="row">{row.unit}<small>{completenessText(row.completeness)}</small></th>
+        <th scope="row">{row.unit}{nonCompleteBadge(row.completeness)}</th>
         <td>{row.startCount}</td>
         <td>{row.additions}</td>
         <td>{row.losses}</td>
@@ -361,7 +383,7 @@ function IntervalDrilldown({ interval }) {
         <DevelopmentDrilldown development={drilldown.development} />
       </section>
     </div>
-    {[...(drilldown.limitations || []), ...(interval.limitations || [])].length > 0 && <ul className="limitations">{[...(drilldown.limitations || []), ...(interval.limitations || [])].map(item => <li key={item}>{item}</li>)}</ul>}
+    {visibleLimitations([...(drilldown.limitations || []), ...(interval.limitations || [])]).length > 0 && <ul className="limitations">{visibleLimitations([...(drilldown.limitations || []), ...(interval.limitations || [])]).map(item => <li key={item}>{item}</li>)}</ul>}
   </section>;
 }
 
@@ -403,7 +425,7 @@ function DevelopmentDrilldown({ development }) {
     <ObservationList title="Технологии" items={tech} />
     <ObservationList title="Разведка" items={scouting} />
     <ObservationList title="Подготовка" items={preparation} />
-    {(development.limitations || []).length > 0 && <ul className="limitations compact-list">{development.limitations.map(item => <li key={item}>{item}</li>)}</ul>}
+    {visibleLimitations(development.limitations).length > 0 && <ul className="limitations compact-list">{visibleLimitations(development.limitations).map(item => <li key={item}>{item}</li>)}</ul>}
   </div>;
 }
 
@@ -438,12 +460,39 @@ function completenessText(value) {
   }[value] || 'статус неизвестен';
 }
 
+function nonCompleteBadge(value) {
+  if (!value || value === 'COMPLETE' || value === 'EXACT') return null;
+  return <small>{completenessText(value)}</small>;
+}
+
+function reconciliationBadge(reconciliationStatus, completeness) {
+  if (reconciliationStatus && reconciliationStatus !== 'EXACT') {
+    return <small>{reconciliationStatusText(reconciliationStatus)}</small>;
+  }
+  return nonCompleteBadge(completeness);
+}
+
 function reconciliationStatusText(value) {
   return {
     EXACT: 'сверка точная',
     PARTIAL: 'сверка частичная',
     UNKNOWN: 'сверка неизвестна',
   }[value] || completenessText(value);
+}
+
+function visibleLimitations(items) {
+  return [...new Set((items || [])
+    .map(userFacingLimitation)
+    .filter(Boolean))];
+}
+
+function userFacingLimitation(item) {
+  if (!item) return '';
+  return String(item)
+    .replace(/ADR-\d+/g, 'правило интерпретации пополнений')
+    .replace(/replay response/g, 'данных реплея')
+    .replace(/combat evidence/g, 'боевых данных')
+    .replace(/NarrativeEvidence/g, 'боевых данных');
 }
 
 function hasValues(map) {
@@ -467,6 +516,27 @@ function kindText(kind) {
     REGROUPING_OR_LOW_ACTIVITY: 'перегруппировка',
     LOW_EVIDENCE: 'низкая доказательность',
   }[kind] || 'интервал';
+}
+
+function intervalMetaText(interval) {
+  return [kindText(interval.kind), interval.completeness && interval.completeness !== 'COMPLETE' ? completenessText(interval.completeness) : '', `${Math.round((interval.confidence || 0) * 100)}%`]
+    .filter(Boolean)
+    .join(' · ');
+}
+
+function metricMetaText(metric) {
+  return [metric.unit || '', metric.completeness && metric.completeness !== 'COMPLETE' ? completenessText(metric.completeness) : '']
+    .filter(Boolean)
+    .join(' · ');
+}
+
+function resultText(value) {
+  return {
+    Win: 'победа',
+    Loss: 'поражение',
+    Tie: 'ничья',
+    Unknown: 'не определён',
+  }[value] || value || 'не определён';
 }
 
 function participantColor(index) {

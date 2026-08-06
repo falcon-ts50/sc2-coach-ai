@@ -154,7 +154,7 @@ public record MatchFlow(
         }
 
         public static CombatDrilldown empty() {
-            return new CombatDrilldown(List.of(), List.of(), List.of("No detected combats occurred in this interval."), List.of(), "");
+            return new CombatDrilldown(List.of(), List.of(), List.of("Боёв в этом интервале не обнаружено."), List.of(), "");
         }
     }
 
@@ -180,7 +180,7 @@ public record MatchFlow(
         public static DevelopmentDrilldown empty() {
             return new DevelopmentDrilldown(MacroEvidence.empty(), ProductionEvidence.empty(), TechEvidence.empty(),
                     ScoutingEvidence.empty(), PreparationEvidence.empty(),
-                    List.of("No economy, production, tech, scouting or preparation evidence is available for this interval."),
+                    List.of("Экономических, производственных, технологических, разведывательных или подготовительных событий в этом интервале не обнаружено."),
                     List.of());
         }
     }
