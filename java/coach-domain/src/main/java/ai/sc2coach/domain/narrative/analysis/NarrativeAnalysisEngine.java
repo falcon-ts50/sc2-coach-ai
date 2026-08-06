@@ -7,6 +7,20 @@ import ai.sc2coach.domain.decision.Decision;
 import ai.sc2coach.domain.knowledge.Recommendation;
 import ai.sc2coach.domain.model.Match;
 import ai.sc2coach.domain.model.PlayerState;
+import ai.sc2coach.domain.narrative.analysis.MatchFlow.CombatDrilldown;
+import ai.sc2coach.domain.narrative.analysis.MatchFlow.DevelopmentDrilldown;
+import ai.sc2coach.domain.narrative.analysis.MatchFlow.DevelopmentMetric;
+import ai.sc2coach.domain.narrative.analysis.MatchFlow.IntervalDelta;
+import ai.sc2coach.domain.narrative.analysis.MatchFlow.IntervalDrilldown;
+import ai.sc2coach.domain.narrative.analysis.MatchFlow.IntervalMetrics;
+import ai.sc2coach.domain.narrative.analysis.MatchFlow.Kind;
+import ai.sc2coach.domain.narrative.analysis.MatchFlow.MacroEvidence;
+import ai.sc2coach.domain.narrative.analysis.MatchFlow.MatchFlowInterval;
+import ai.sc2coach.domain.narrative.analysis.MatchFlow.MetricDelta;
+import ai.sc2coach.domain.narrative.analysis.MatchFlow.PreparationEvidence;
+import ai.sc2coach.domain.narrative.analysis.MatchFlow.ProductionEvidence;
+import ai.sc2coach.domain.narrative.analysis.MatchFlow.ScoutingEvidence;
+import ai.sc2coach.domain.narrative.analysis.MatchFlow.TechEvidence;
 import ai.sc2coach.domain.narrative.analysis.NarrativeChartModel.Completeness;
 import ai.sc2coach.domain.narrative.analysis.NarrativeChartModel.Interval;
 import ai.sc2coach.domain.narrative.analysis.NarrativeChartModel.Marker;
@@ -68,6 +82,7 @@ public final class NarrativeAnalysisEngine {
         NarrativeTimeline timeline = new NarrativeTimeline(events, snapshots, transitions, phases, links);
         NarrativeChartModel chart = chart(snapshots, phases, events);
         NarrativeEvidence evidence = evidence(match, focus, snapshots, phases, events, input.combats());
+        MatchFlow matchFlow = matchFlow(match, snapshots, phases, transitions, events, input.combats(), evidence);
         NarrativeSummary summary = summary(match, focus, team, phases, transitions, links);
 
         return new NarrativeAnalysis(
@@ -82,6 +97,7 @@ public final class NarrativeAnalysisEngine {
                 summary,
                 chart,
                 evidence,
+                matchFlow,
                 List.of(
                         "Narrative Analysis consumes existing deterministic engines and does not infer a strategic result.",
                         "Replay data does not prove intent or causality; causal links use cautious precedence/contribution language.",
@@ -462,6 +478,423 @@ public final class NarrativeAnalysisEngine {
                 intervals,
                 List.of("Economy and supply are context proxies; the replay response does not expose full base, queue or bank-spend series.")
         );
+    }
+
+    private MatchFlow matchFlow(Match match, List<MatchStateSnapshot> snapshots, List<MatchPhase> phases,
+                                List<StateTransition> transitions, List<NarrativeEvent> events,
+                                List<Combat> combats, NarrativeEvidence evidence) {
+        if (snapshots.isEmpty()) return MatchFlow.empty();
+        Duration start = Duration.ZERO;
+        Duration end = matchEnd(match, snapshots, combats);
+        if (end.compareTo(start) <= 0) return MatchFlow.empty();
+
+        TreeSet<Duration> boundaries = new TreeSet<>();
+        boundaries.add(start);
+        boundaries.add(end);
+        snapshots.forEach(snapshot -> boundaries.add(clamp(snapshot.at(), start, end)));
+        phases.forEach(phase -> {
+            boundaries.add(clamp(phase.startedAt(), start, end));
+            boundaries.add(clamp(phase.endedAt(), start, end));
+        });
+        combats.forEach(combat -> {
+            boundaries.add(clamp(combat.startedAt(), start, end));
+            boundaries.add(clamp(combat.endedAt(), start, end));
+        });
+
+        Map<String, CombatEvidence> combatEvidenceById = evidence.combats().stream()
+                .collect(Collectors.toMap(CombatEvidence::id, item -> item, (left, right) -> left, LinkedHashMap::new));
+        List<ParticipantIdentity> participants = evidence.participants();
+        List<Duration> ordered = new ArrayList<>(boundaries);
+        List<MatchFlowInterval> intervals = new ArrayList<>();
+        for (int i = 0; i < ordered.size() - 1; i++) {
+            Duration from = ordered.get(i);
+            Duration to = ordered.get(i + 1);
+            if (to.compareTo(from) <= 0) continue;
+            List<Combat> overlappingCombats = overlappingCombats(combats, from, to);
+            Map<String, IntervalMetrics> startMetrics = intervalMetrics(participants, snapshots, from);
+            Map<String, IntervalMetrics> endMetrics = intervalMetrics(participants, snapshots, to);
+            IntervalDelta delta = intervalDelta(startMetrics, endMetrics);
+            List<String> snapshotIds = snapshotIds(snapshots, from, to, startMetrics, endMetrics);
+            List<String> transitionIds = transitionIds(transitions, from, to);
+            List<String> intervalEventIds = eventIdsHalfOpen(events, from, to);
+            List<String> combatIds = overlappingCombats.stream().map(Combat::id).toList();
+            List<String> evidenceIds = evidenceIds(snapshotIds, transitionIds, intervalEventIds, combatIds);
+            Kind kind = classifyInterval(intervals, from, overlappingCombats, delta);
+            IntervalDrilldown drilldown = intervalDrilldown(from, to, overlappingCombats, combatEvidenceById,
+                    startMetrics, endMetrics, delta, snapshotIds);
+            Completeness completeness = intervalCompleteness(startMetrics, endMetrics, drilldown);
+            String id = "match-flow-" + String.format("%03d", intervals.size());
+            intervals.add(new MatchFlowInterval(
+                    id,
+                    intervals.size(),
+                    kind,
+                    intervalTitle(kind),
+                    from,
+                    to,
+                    intervalConfidence(kind, completeness, drilldown),
+                    completeness,
+                    intervalSummary(kind, delta, drilldown),
+                    snapshotIds,
+                    transitionIds,
+                    intervalEventIds,
+                    evidenceIds,
+                    combatIds,
+                    startMetrics,
+                    endMetrics,
+                    delta,
+                    drilldown,
+                    intervalLimitations(drilldown)
+            ));
+        }
+        return new MatchFlow(
+                "match-flow.v1",
+                start,
+                end,
+                intervals,
+                combats.stream().map(Combat::id).toList(),
+                List.of(
+                        "Match flow is deterministic from existing Narrative Analysis, Combat History and MatchContext evidence.",
+                        "Development drilldown uses available macro deltas and combat-window unit availability; full production queues, exact research completion times and full vision are not reconstructed."
+                )
+        );
+    }
+
+    private Duration matchEnd(Match match, List<MatchStateSnapshot> snapshots, List<Combat> combats) {
+        Duration end = match == null ? Duration.ZERO : match.duration();
+        end = max(end, lastAt(snapshots));
+        for (Combat combat : combats) {
+            end = max(end, combat.endedAt());
+        }
+        return end;
+    }
+
+    private Duration max(Duration left, Duration right) {
+        if (left == null) return right == null ? Duration.ZERO : right;
+        if (right == null) return left;
+        return left.compareTo(right) >= 0 ? left : right;
+    }
+
+    private Duration clamp(Duration value, Duration start, Duration end) {
+        if (value == null) return start;
+        if (value.compareTo(start) < 0) return start;
+        if (value.compareTo(end) > 0) return end;
+        return value;
+    }
+
+    private List<Combat> overlappingCombats(List<Combat> combats, Duration from, Duration to) {
+        return combats.stream()
+                .filter(combat -> overlaps(combat.startedAt(), combat.endedAt(), from, to))
+                .sorted(Comparator.comparing(Combat::startedAt).thenComparing(Combat::id))
+                .toList();
+    }
+
+    private boolean overlaps(Duration leftStart, Duration leftEnd, Duration rightStart, Duration rightEnd) {
+        Duration normalizedLeftStart = leftStart == null ? Duration.ZERO : leftStart;
+        Duration normalizedLeftEnd = leftEnd == null ? normalizedLeftStart : leftEnd;
+        return normalizedLeftStart.compareTo(rightEnd) < 0 && normalizedLeftEnd.compareTo(rightStart) > 0;
+    }
+
+    private Map<String, IntervalMetrics> intervalMetrics(List<ParticipantIdentity> participants,
+                                                         List<MatchStateSnapshot> snapshots,
+                                                         Duration at) {
+        MatchStateSnapshot snapshot = snapshotAtOrBefore(snapshots, at).orElseGet(snapshots::getFirst);
+        Map<String, IntervalMetrics> result = new LinkedHashMap<>();
+        for (ParticipantIdentity participant : participants) {
+            MatchStateSnapshot.Metrics metrics = snapshot.playerMetrics().get(participant.displayName());
+            if (metrics == null) {
+                result.put(participant.id(), IntervalMetrics.unavailable());
+                continue;
+            }
+            result.put(participant.id(), new IntervalMetrics(
+                    metrics.armyValue(),
+                    metrics.economyProxy(),
+                    metrics.supplyUsed(),
+                    Completeness.COMPLETE,
+                    List.of(snapshot.id())
+            ));
+        }
+        return result;
+    }
+
+    private Optional<MatchStateSnapshot> snapshotAtOrBefore(List<MatchStateSnapshot> snapshots, Duration at) {
+        return snapshots.stream()
+                .filter(snapshot -> snapshot.at().compareTo(at) <= 0)
+                .max(Comparator.comparing(MatchStateSnapshot::at));
+    }
+
+    private IntervalDelta intervalDelta(Map<String, IntervalMetrics> startMetrics,
+                                        Map<String, IntervalMetrics> endMetrics) {
+        Map<String, MetricDelta> deltas = new LinkedHashMap<>();
+        boolean partial = false;
+        for (Map.Entry<String, IntervalMetrics> entry : startMetrics.entrySet()) {
+            IntervalMetrics start = entry.getValue();
+            IntervalMetrics end = endMetrics.get(entry.getKey());
+            if (end == null || start.completeness() == Completeness.UNAVAILABLE || end.completeness() == Completeness.UNAVAILABLE) {
+                partial = true;
+                continue;
+            }
+            deltas.put(entry.getKey(), new MetricDelta(
+                    end.armyValue() - start.armyValue(),
+                    end.economyProxy() - start.economyProxy(),
+                    end.supplyUsed() - start.supplyUsed()
+            ));
+        }
+        return new IntervalDelta(deltas, partial ? Completeness.PARTIAL : Completeness.COMPLETE,
+                partial ? List.of("Some participant metrics are unavailable for this interval.") : List.of());
+    }
+
+    private List<String> snapshotIds(List<MatchStateSnapshot> snapshots, Duration from, Duration to,
+                                     Map<String, IntervalMetrics> startMetrics,
+                                     Map<String, IntervalMetrics> endMetrics) {
+        TreeSet<String> ids = new TreeSet<>();
+        snapshots.stream()
+                .filter(snapshot -> snapshot.at().compareTo(from) >= 0 && snapshot.at().compareTo(to) <= 0)
+                .map(MatchStateSnapshot::id)
+                .forEach(ids::add);
+        startMetrics.values().stream().flatMap(metrics -> metrics.sourceSnapshotIds().stream()).forEach(ids::add);
+        endMetrics.values().stream().flatMap(metrics -> metrics.sourceSnapshotIds().stream()).forEach(ids::add);
+        return List.copyOf(ids);
+    }
+
+    private List<String> transitionIds(List<StateTransition> transitions, Duration from, Duration to) {
+        return transitions.stream()
+                .filter(transition -> overlaps(transition.from(), transition.to(), from, to))
+                .map(StateTransition::id)
+                .toList();
+    }
+
+    private List<String> eventIdsHalfOpen(List<NarrativeEvent> events, Duration from, Duration to) {
+        return events.stream()
+                .filter(event -> eventOverlaps(event, from, to))
+                .map(NarrativeEvent::id)
+                .toList();
+    }
+
+    private boolean eventOverlaps(NarrativeEvent event, Duration from, Duration to) {
+        Duration at = event.at() == null ? Duration.ZERO : event.at();
+        Duration endedAt = event.endedAt() == null ? at : event.endedAt();
+        if (endedAt.compareTo(at) <= 0) {
+            return at.compareTo(from) >= 0 && at.compareTo(to) < 0;
+        }
+        return overlaps(at, endedAt, from, to);
+    }
+
+    private List<String> evidenceIds(List<String> snapshotIds, List<String> transitionIds,
+                                     List<String> eventIds, List<String> combatIds) {
+        TreeSet<String> ids = new TreeSet<>();
+        ids.addAll(snapshotIds);
+        ids.addAll(transitionIds);
+        ids.addAll(eventIds);
+        ids.addAll(combatIds);
+        return List.copyOf(ids);
+    }
+
+    private Kind classifyInterval(List<MatchFlowInterval> previousIntervals, Duration from,
+                                  List<Combat> overlappingCombats, IntervalDelta delta) {
+        if (!overlappingCombats.isEmpty()) return Kind.COMBAT;
+        if (from.equals(Duration.ZERO)) return Kind.OPENING_BUILDUP;
+        double army = focusDelta(delta, Metric.ARMY);
+        double economy = focusDelta(delta, Metric.ECONOMY);
+        double supply = focusDelta(delta, Metric.SUPPLY);
+        if (army > 1 && previousIntervals.stream().anyMatch(interval -> interval.kind() == Kind.COMBAT)) {
+            return Kind.RECOVERY;
+        }
+        if (economy > 1 || supply > 1) return Kind.ECONOMIC_GROWTH;
+        if (army > 1) return Kind.ARMY_BUILDUP;
+        if (Math.abs(army) > 1 || Math.abs(economy) > 1 || Math.abs(supply) > 1) {
+            return Kind.REGROUPING_OR_LOW_ACTIVITY;
+        }
+        return Kind.LOW_EVIDENCE;
+    }
+
+    private double focusDelta(IntervalDelta delta, Metric metric) {
+        return delta.byParticipantId().values().stream()
+                .findFirst()
+                .map(value -> switch (metric) {
+                    case ARMY -> value.armyValueDelta();
+                    case ECONOMY -> value.economyProxyDelta();
+                    case SUPPLY -> value.supplyUsedDelta();
+                    case OVERALL -> 0.0;
+                })
+                .orElse(0.0);
+    }
+
+    private IntervalDrilldown intervalDrilldown(Duration from, Duration to, List<Combat> overlappingCombats,
+                                                Map<String, CombatEvidence> combatEvidenceById,
+                                                Map<String, IntervalMetrics> startMetrics,
+                                                Map<String, IntervalMetrics> endMetrics,
+                                                IntervalDelta delta, List<String> snapshotIds) {
+        List<String> combatIds = overlappingCombats.stream().map(Combat::id).toList();
+        List<CombatEvidence> combatEvidence = combatIds.stream()
+                .map(combatEvidenceById::get)
+                .filter(Objects::nonNull)
+                .toList();
+        CombatDrilldown combat = new CombatDrilldown(
+                combatIds,
+                combatEvidence,
+                combatIds.isEmpty() ? List.of("Боёв в этом интервале не обнаружено.") : List.of(),
+                combatEvidence.size() == combatIds.size()
+                        ? List.of()
+                        : List.of("Some overlapping combats do not have detailed NarrativeEvidence rows.")
+        );
+        DevelopmentDrilldown development = developmentDrilldown(from, to, overlappingCombats, startMetrics, endMetrics, delta, snapshotIds);
+        List<String> limitations = new ArrayList<>();
+        limitations.addAll(combat.limitations());
+        limitations.addAll(development.limitations());
+        return new IntervalDrilldown(combat, development, limitations);
+    }
+
+    private DevelopmentDrilldown developmentDrilldown(Duration from, Duration to, List<Combat> overlappingCombats,
+                                                      Map<String, IntervalMetrics> startMetrics,
+                                                      Map<String, IntervalMetrics> endMetrics,
+                                                      IntervalDelta delta, List<String> snapshotIds) {
+        MacroEvidence macro = macroEvidence(startMetrics, endMetrics, delta, snapshotIds);
+        ProductionEvidence production = productionEvidence(overlappingCombats);
+        TechEvidence tech = techEvidence(overlappingCombats);
+        PreparationEvidence preparation = preparationEvidence(overlappingCombats, delta);
+        ScoutingEvidence scouting = ScoutingEvidence.empty();
+        boolean hasDevelopment = !macro.metrics().isEmpty()
+                || !production.observations().isEmpty()
+                || !tech.observations().isEmpty()
+                || !preparation.observations().isEmpty();
+        List<String> emptyStates = hasDevelopment
+                ? List.of()
+                : List.of("Экономических, производственных, технологических или разведывательных событий в этом интервале не обнаружено.");
+        List<String> limitations = new ArrayList<>();
+        limitations.add("Full production queues, exact research completion times and full vision are not available in the current replay response.");
+        limitations.addAll(macro.limitations());
+        limitations.addAll(production.limitations());
+        limitations.addAll(tech.limitations());
+        limitations.addAll(preparation.limitations());
+        return new DevelopmentDrilldown(macro, production, tech, scouting, preparation, emptyStates, limitations);
+    }
+
+    private MacroEvidence macroEvidence(Map<String, IntervalMetrics> startMetrics,
+                                        Map<String, IntervalMetrics> endMetrics,
+                                        IntervalDelta delta, List<String> snapshotIds) {
+        Map<String, MetricDelta> byParticipant = delta.byParticipantId();
+        if (byParticipant.isEmpty()) return MacroEvidence.empty();
+        String focusParticipantId = byParticipant.keySet().iterator().next();
+        MetricDelta focus = byParticipant.get(focusParticipantId);
+        IntervalMetrics start = startMetrics.getOrDefault(focusParticipantId, IntervalMetrics.unavailable());
+        IntervalMetrics end = endMetrics.getOrDefault(focusParticipantId, IntervalMetrics.unavailable());
+        List<DevelopmentMetric> metrics = new ArrayList<>();
+        addMetric(metrics, "armyValue", start.armyValue(), end.armyValue(), focus.armyValueDelta());
+        addMetric(metrics, "economyProxy", start.economyProxy(), end.economyProxy(), focus.economyProxyDelta());
+        addMetric(metrics, "supplyUsed", start.supplyUsed(), end.supplyUsed(), focus.supplyUsedDelta());
+        if (metrics.isEmpty()) return MacroEvidence.empty();
+        return new MacroEvidence(
+                "Macro context changed during this interval.",
+                metrics,
+                delta.completeness(),
+                snapshotIds,
+                delta.limitations()
+        );
+    }
+
+    private void addMetric(List<DevelopmentMetric> metrics, String metric, double start, double end, double delta) {
+        if (Math.abs(delta) <= 1) return;
+        metrics.add(new DevelopmentMetric(metric, start, end, delta, Completeness.COMPLETE));
+    }
+
+    private ProductionEvidence productionEvidence(List<Combat> overlappingCombats) {
+        List<String> observations = new ArrayList<>();
+        for (Combat combat : overlappingCombats) {
+            for (Combat.Participant participant : combat.participants()) {
+                if (participant.additions().isEmpty()) continue;
+                observations.add(participant.player() + ": new combat units became available during the interval: "
+                        + composition(participant.additions()) + ".");
+            }
+        }
+        return new ProductionEvidence(observations, observations.isEmpty()
+                ? List.of()
+                : List.of("Combat additions preserve ADR-012 semantics: units became available during the interval; local participation is not asserted."));
+    }
+
+    private TechEvidence techEvidence(List<Combat> overlappingCombats) {
+        List<String> observations = new ArrayList<>();
+        for (Combat combat : overlappingCombats) {
+            for (Combat.Participant participant : combat.participants()) {
+                if (!participant.upgrades().isEmpty()) {
+                    observations.add(participant.player() + ": observed upgrades in combat snapshot: "
+                            + String.join(", ", participant.upgrades()) + ".");
+                }
+                if (!participant.technologies().isEmpty()) {
+                    observations.add(participant.player() + ": observed technologies in combat snapshot: "
+                            + String.join(", ", participant.technologies()) + ".");
+                }
+            }
+        }
+        return new TechEvidence(observations, observations.isEmpty()
+                ? List.of()
+                : List.of("Observed upgrades/technologies describe snapshot state; they do not prove exact research timing inside the interval."));
+    }
+
+    private PreparationEvidence preparationEvidence(List<Combat> overlappingCombats, IntervalDelta delta) {
+        if (!overlappingCombats.isEmpty()) return PreparationEvidence.empty();
+        double army = focusDelta(delta, Metric.ARMY);
+        if (army <= 1) return PreparationEvidence.empty();
+        return new PreparationEvidence(
+                List.of("Army value increased without detected combat, consistent with buildup or preparation."),
+                List.of("Preparation is inferred from observed metric deltas, not from hidden intent.")
+        );
+    }
+
+    private String composition(Map<String, Integer> value) {
+        return value.entrySet().stream()
+                .sorted(Map.Entry.comparingByKey())
+                .map(entry -> "+" + entry.getValue() + " " + entry.getKey())
+                .collect(Collectors.joining(", "));
+    }
+
+    private Completeness intervalCompleteness(Map<String, IntervalMetrics> startMetrics,
+                                              Map<String, IntervalMetrics> endMetrics,
+                                              IntervalDrilldown drilldown) {
+        boolean partial = startMetrics.values().stream().anyMatch(metrics -> metrics.completeness() != Completeness.COMPLETE)
+                || endMetrics.values().stream().anyMatch(metrics -> metrics.completeness() != Completeness.COMPLETE)
+                || !drilldown.limitations().isEmpty();
+        return partial ? Completeness.PARTIAL : Completeness.COMPLETE;
+    }
+
+    private double intervalConfidence(Kind kind, Completeness completeness, IntervalDrilldown drilldown) {
+        if (kind == Kind.LOW_EVIDENCE) return 0.38;
+        double base = kind == Kind.COMBAT ? 0.78 : 0.62;
+        if (completeness != Completeness.COMPLETE) base -= 0.08;
+        if (!drilldown.development().emptyStates().isEmpty() && !drilldown.combat().emptyStates().isEmpty()) base -= 0.08;
+        return Math.max(0.25, Math.min(0.9, base));
+    }
+
+    private String intervalTitle(Kind kind) {
+        return switch (kind) {
+            case OPENING_BUILDUP -> "Открытие и развитие";
+            case ECONOMIC_GROWTH -> "Экономическое развитие";
+            case TECH_TRANSITION -> "Технологический переход";
+            case ARMY_BUILDUP -> "Наращивание армии";
+            case MAP_CONTROL_OR_SCOUTING -> "Контроль карты / разведка";
+            case PRESSURE_PREPARATION -> "Подготовка давления";
+            case COMBAT -> "Боевой интервал";
+            case RECOVERY -> "Восстановление";
+            case REGROUPING_OR_LOW_ACTIVITY -> "Перегруппировка / низкая активность";
+            case LOW_EVIDENCE -> "Низкая доказательность";
+        };
+    }
+
+    private String intervalSummary(Kind kind, IntervalDelta delta, IntervalDrilldown drilldown) {
+        String combatText = drilldown.combat().combatIds().isEmpty()
+                ? "боёв нет"
+                : "боёв: " + drilldown.combat().combatIds().size();
+        String developmentText = drilldown.development().emptyStates().isEmpty()
+                ? "данные по развитию есть"
+                : "данных по развитию нет";
+        if (kind == Kind.LOW_EVIDENCE) {
+            return "Интервал сохранён без уверенного стратегического ярлыка: " + combatText + ", " + developmentText + ".";
+        }
+        return intervalTitle(kind) + ": " + combatText + ", " + developmentText + ".";
+    }
+
+    private List<String> intervalLimitations(IntervalDrilldown drilldown) {
+        TreeSet<String> limitations = new TreeSet<>(drilldown.limitations());
+        return List.copyOf(limitations);
     }
 
     private NarrativeEvidence evidence(Match match, PlayerState focus, List<MatchStateSnapshot> snapshots,

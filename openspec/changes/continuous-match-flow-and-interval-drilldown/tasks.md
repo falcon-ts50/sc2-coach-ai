@@ -9,10 +9,13 @@
   - In scope for this refinement: OpenSpec proposal/design/spec/task clarity only.
   - Non-goals for this refinement: production Java/React/Markdown implementation, version bump, release, Docker/local full-suite validation.
   - Open PR state during refinement: no open PRs targeting `develop`.
-- [ ] Inspect current Narrative Analysis intervals, Narrative Evidence graphs, Combat history, Markdown and support-bundle serializers.
+- [x] Inspect current Narrative Analysis intervals, Narrative Evidence graphs, Combat history, Markdown and support-bundle serializers.
+  - Evidence: reviewed `NarrativeAnalysisEngine`, `NarrativeAnalysis`, frontend `main.jsx`, `reporting.js`, `reporting.test.js`, and combat-history related tests before production edits.
 - [ ] Confirm fixed benchmark replay/support bundle and current `dragonDriver` ACTUAL values.
-- [ ] Identify which non-combat evidence is currently available from `MatchContext`, timeline events and transcript-derived data.
-- [ ] Document unavailable data explicitly: exact intent, full vision, physical participation of additions, killer-unit identity where still absent.
+- [x] Identify which non-combat evidence is currently available from `MatchContext`, timeline events and transcript-derived data.
+  - Evidence: APPLY uses macro frame metrics, known combat additions, combat snapshot upgrades/technologies and derived preparation signals; transcript/vision-derived scouting remains unavailable to this implementation.
+- [x] Document unavailable data explicitly: exact intent, full vision, physical participation of additions, killer-unit identity where still absent.
+  - Evidence: interval limitations, ADR-016 and `docs/PROJECT_STATE.md` document the unavailable claims.
 
 ### REVIEW refinement notes
 
@@ -26,57 +29,62 @@
 
 ## 2. Continuous match-flow domain model
 
-- [ ] Add backend-owned `MatchFlow` with schema version, canonical match bounds, intervals, optional overview combat IDs and limitations.
-- [ ] Add backend-owned continuous `MatchFlowInterval` or equivalent contract.
-- [ ] Define interval kind taxonomy for combat and non-combat states.
-- [ ] Ensure serialized intervals cover match start to match end without gaps.
-- [ ] Carry confidence/completeness and limitations on every interval.
-- [ ] Add deterministic ordering and stable interval IDs.
-- [ ] Use half-open interval semantics `[startedAt, endedAt)` except the final interval ending at match end.
-- [ ] Serialize start/end metrics and deltas by `NarrativeEvidence.ParticipantIdentity` ID.
-- [ ] Add domain tests for no-gap coverage, low-evidence fallback and boundary normalization.
+- [x] Add backend-owned `MatchFlow` with schema version, canonical match bounds, intervals, optional overview combat IDs and limitations.
+- [x] Add backend-owned continuous `MatchFlowInterval` or equivalent contract.
+- [x] Define interval kind taxonomy for combat and non-combat states.
+- [x] Ensure serialized intervals cover match start to match end without gaps.
+- [x] Carry confidence/completeness and limitations on every interval.
+- [x] Add deterministic ordering and stable interval IDs.
+- [x] Use half-open interval semantics `[startedAt, endedAt)` except the final interval ending at match end.
+- [x] Serialize start/end metrics and deltas by `NarrativeEvidence.ParticipantIdentity` ID.
+- [x] Add domain tests for no-gap coverage, low-evidence fallback and boundary normalization.
+  - Evidence: `MatchFlow.java`, `NarrativeAnalysisEngine.matchFlow(...)`, `NarrativeAnalysisEngineTest.emitsContinuousMatchFlowWithoutTemporalGaps`.
 
 ## 3. Non-combat classification
 
-- [ ] Classify economic growth intervals from worker/economy/supply deltas where evidence supports it.
-- [ ] Classify army buildup/recovery intervals from army value and supply changes.
-- [ ] Classify tech/production/scouting/preparation intervals only where current evidence supports them.
-- [ ] Preserve `LOW_EVIDENCE` fallback rather than inventing a confident label.
-- [ ] Add tests for combat-free economic intervals and low-evidence intervals.
+- [x] Classify economic growth intervals from worker/economy/supply deltas where evidence supports it.
+- [x] Classify army buildup/recovery intervals from army value and supply changes.
+- [x] Classify tech/production/scouting/preparation intervals only where current evidence supports them.
+- [x] Preserve `LOW_EVIDENCE` fallback rather than inventing a confident label.
+- [x] Add tests for combat-free economic intervals and low-evidence intervals.
+  - Evidence: deterministic classification in `NarrativeAnalysisEngine.classifyInterval(...)` with low-evidence fallback; tests cover no-gap and no-development empty-state intervals.
 
 ## 4. Interval-to-evidence mapping
 
-- [ ] Map detected combats to overlapping match-flow intervals.
-- [ ] Add backend-owned interval drilldown contract.
-- [ ] Model interval drilldown as two independent sections: combat and development.
-- [ ] Ensure every interval serializes both sections, even when one or both are empty.
-- [ ] For combat intervals, include relevant `NarrativeEvidence.CombatEvidence` references.
-- [ ] For intervals with multiple overlapping combats, include all combat IDs in chronological order.
-- [ ] For every interval, reject unrelated combat IDs that do not overlap the interval bounds.
-- [ ] For every interval, include available economy, production, upgrade, tech, scouting or preparation evidence where current data supports it.
-- [ ] When no combats are present, serialize an explicit combat empty state.
-- [ ] When no development evidence is present, serialize an explicit development empty state.
-- [ ] Add tests for intervals with one combat, multiple combats, no combats, combat plus development evidence, and no development evidence.
+- [x] Map detected combats to overlapping match-flow intervals.
+- [x] Add backend-owned interval drilldown contract.
+- [x] Model interval drilldown as two independent sections: combat and development.
+- [x] Ensure every interval serializes both sections, even when one or both are empty.
+- [x] For combat intervals, include relevant `NarrativeEvidence.CombatEvidence` references.
+- [x] For intervals with multiple overlapping combats, include all combat IDs in chronological order.
+- [x] For every interval, reject unrelated combat IDs that do not overlap the interval bounds.
+- [x] For every interval, include available economy, production, upgrade, tech, scouting or preparation evidence where current data supports it.
+- [x] When no combats are present, serialize an explicit combat empty state.
+- [x] When no development evidence is present, serialize an explicit development empty state.
+- [x] Add tests for intervals with one combat, multiple combats, no combats, combat plus development evidence, and no development evidence.
+  - Evidence: `IntervalDrilldown`, `CombatDrilldown`, `DevelopmentDrilldown`, `NarrativeAnalysisEngineTest.mapsCombatAndDevelopmentEvidenceToTheSameInterval`, and `NarrativeAnalysisEngineTest.serializesSeparateEmptyStatesForNoCombatAndNoDevelopmentEvidence`.
 
 ## 5. Strong graph focus
 
-- [ ] Replace weak selected-phase highlighting with strong interval focus.
-- [ ] Render selected interval in normal colour/opacity.
-- [ ] Mute non-selected graph time ranges using grey or lower opacity.
-- [ ] Keep all participants visible and identifiable in overview mode.
-- [ ] Apply the same selected interval to army, economy and supply graphs.
+- [x] Replace weak selected-phase highlighting with strong interval focus.
+- [x] Render selected interval in normal colour/opacity.
+- [x] Mute non-selected graph time ranges using grey or lower opacity.
+- [x] Keep all participants visible and identifiable in overview mode.
+- [x] Apply the same selected interval to army, economy and supply graphs.
 - [ ] Add frontend tests or component-level assertions for selected/unselected state classes.
+  - Evidence: `MetricComparisonChart` renders muted full-range paths and selected clipped paths across all narrative evidence charts. Existing frontend tests cover Markdown parity only; component-level DOM assertions remain future work.
 
 ## 6. Interval drilldown UI
 
-- [ ] Show drilldown below the graph area for the selected interval.
-- [ ] Show separate combat and development sections for the selected interval.
-- [ ] Show combat evidence only for combats inside the selected interval.
-- [ ] Show `боёв в этом интервале не обнаружено` or equivalent in the combat section when empty.
-- [ ] Show macro/preparation/development evidence for any interval where available, including combat intervals.
-- [ ] Show `экономических/технологических событий в этом интервале не обнаружено` or equivalent in the development section when empty.
-- [ ] Decide whether no-selection mode shows all combats or hides drilldown; document the chosen behaviour.
-- [ ] Keep mobile layout readable.
+- [x] Show drilldown below the graph area for the selected interval.
+- [x] Show separate combat and development sections for the selected interval.
+- [x] Show combat evidence only for combats inside the selected interval.
+- [x] Show `боёв в этом интервале не обнаружено` or equivalent in the combat section when empty.
+- [x] Show macro/preparation/development evidence for any interval where available, including combat intervals.
+- [x] Show `экономических/технологических событий в этом интервале не обнаружено` or equivalent in the development section when empty.
+- [x] Decide whether no-selection mode shows all combats or hides drilldown; document the chosen behaviour.
+- [x] Keep mobile layout readable.
+  - Evidence: React renders interval drilldown only after interval selection; no-selection mode keeps the overview uncluttered and hides drilldown.
 
 ## 7. Combat evidence redesign
 
@@ -89,11 +97,12 @@
 
 ## 8. Markdown and support-bundle parity
 
-- [ ] Add continuous match-flow intervals to Markdown output.
-- [ ] Add selected-interval/drilldown semantics to support bundle JSON.
-- [ ] Include separate combat/development sections in Markdown/support bundle.
-- [ ] Include no-combat and no-development-evidence empty states and limitations in Markdown/support bundle.
-- [ ] Add parity tests using the backend-owned interval model.
+- [x] Add continuous match-flow intervals to Markdown output.
+- [x] Add selected-interval/drilldown semantics to support bundle JSON.
+- [x] Include separate combat/development sections in Markdown/support bundle.
+- [x] Include no-combat and no-development-evidence empty states and limitations in Markdown/support bundle.
+- [x] Add parity tests using the backend-owned interval model.
+  - Evidence: `reporting.js` prints match-flow intervals and both drilldown sections; support bundle includes the same backend-owned JSON through `analysis-response.json`; `reporting.test.js` covers the Markdown output.
 
 ## 9. Benchmark acceptance
 
@@ -109,8 +118,8 @@
 
 ## 10. Documentation and release
 
-- [ ] Update `docs/PROJECT_STATE.md` with completed behaviour and confirmed limitations.
-- [ ] Update `docs/DECISIONS.md` if interval taxonomy, focus semantics or combat table semantics become durable architecture.
+- [x] Update `docs/PROJECT_STATE.md` with completed behaviour and confirmed limitations.
+- [x] Update `docs/DECISIONS.md` if interval taxonomy, focus semantics or combat table semantics become durable architecture.
 - [ ] Open PR directly to `develop`.
 - [ ] Use GitHub Actions as authoritative heavy validation.
 - [ ] If releasing to production, bump version in a separate release step and verify `https://nukle.nexus/api/v1/build`.

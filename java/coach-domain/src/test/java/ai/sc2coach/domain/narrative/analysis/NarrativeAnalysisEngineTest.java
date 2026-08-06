@@ -122,6 +122,60 @@ class NarrativeAnalysisEngineTest {
         });
     }
 
+    @Test
+    void emitsContinuousMatchFlowWithoutTemporalGaps() {
+        NarrativeAnalysis analysis = engine.analyze(input());
+
+        MatchFlow matchFlow = analysis.matchFlow();
+
+        assertThat(matchFlow.matchStartedAt()).isEqualTo(Duration.ZERO);
+        assertThat(matchFlow.matchEndedAt()).isEqualTo(Duration.ofSeconds(1260));
+        assertThat(matchFlow.intervals()).isNotEmpty();
+        assertThat(matchFlow.intervals().getFirst().startedAt()).isEqualTo(matchFlow.matchStartedAt());
+        assertThat(matchFlow.intervals().getLast().endedAt()).isEqualTo(matchFlow.matchEndedAt());
+        for (int i = 0; i < matchFlow.intervals().size(); i++) {
+            MatchFlow.MatchFlowInterval interval = matchFlow.intervals().get(i);
+            assertThat(interval.ordinal()).isEqualTo(i);
+            assertThat(interval.startedAt()).isLessThan(interval.endedAt());
+            if (i > 0) {
+                assertThat(interval.startedAt()).isEqualTo(matchFlow.intervals().get(i - 1).endedAt());
+            }
+        }
+    }
+
+    @Test
+    void mapsCombatAndDevelopmentEvidenceToTheSameInterval() {
+        NarrativeAnalysis analysis = engine.analyze(inputWithCombatParticipants());
+
+        MatchFlow.MatchFlowInterval combatInterval = analysis.matchFlow().intervals().stream()
+                .filter(interval -> interval.combatIds().contains("combat-2"))
+                .findFirst()
+                .orElseThrow();
+
+        assertThat(combatInterval.kind()).isEqualTo(MatchFlow.Kind.COMBAT);
+        assertThat(combatInterval.drilldown().combat().combatIds()).containsExactly("combat-2");
+        assertThat(combatInterval.drilldown().combat().emptyStates()).isEmpty();
+        assertThat(combatInterval.drilldown().development().production().observations())
+                .anyMatch(item -> item.contains("Lulu") && item.contains("Zergling"));
+        assertThat(combatInterval.drilldown().development().emptyStates()).isEmpty();
+    }
+
+    @Test
+    void serializesSeparateEmptyStatesForNoCombatAndNoDevelopmentEvidence() {
+        NarrativeAnalysis analysis = engine.analyze(lowEvidenceInput());
+
+        MatchFlow.MatchFlowInterval emptyInterval = analysis.matchFlow().intervals().stream()
+                .filter(interval -> !interval.drilldown().combat().emptyStates().isEmpty())
+                .filter(interval -> !interval.drilldown().development().emptyStates().isEmpty())
+                .findFirst()
+                .orElseThrow();
+
+        assertThat(emptyInterval.drilldown().combat().emptyStates())
+                .contains("Боёв в этом интервале не обнаружено.");
+        assertThat(emptyInterval.drilldown().development().emptyStates())
+                .contains("Экономических, производственных, технологических или разведывательных событий в этом интервале не обнаружено.");
+    }
+
     private NarrativeAnalysisInput input() {
         Match match = new Match("Test Map", "2v2", Duration.ofMinutes(20), List.of("dragonDriver", "Lulu"),
                 List.of(player(1, "Frontdoor", 1, "Loss"), player(2, "Guardian", 1, "Loss"),
@@ -190,6 +244,17 @@ class NarrativeAnalysisEngineTest {
         return new NarrativeAnalysisInput(match, "dragonDriver", context(), turningPoints, List.of(), combats, null, List.of());
     }
 
+    private NarrativeAnalysisInput lowEvidenceInput() {
+        Match match = new Match("Test Map", "1v1", Duration.ofMinutes(10), List.of("dragonDriver"),
+                List.of(player(1, "Frontdoor", 1, "Loss"), player(3, "dragonDriver", 2, "Win")));
+        MatchContext context = new MatchContext(List.of(
+                quietFrame(0),
+                quietFrame(300),
+                quietFrame(600)
+        ), MatchContext.MatchSummary.empty());
+        return new NarrativeAnalysisInput(match, "dragonDriver", context, List.of(), List.of(), List.of(), null, List.of());
+    }
+
     private MatchContext context() {
         return new MatchContext(List.of(
                 frame(0, 500, 400, 14, 20),
@@ -214,6 +279,14 @@ class NarrativeAnalysisEngineTest {
                 30, AHEAD);
         return new MatchContext.ContextFrame(Duration.ofSeconds(seconds), List.of(frontdoor, dragon, lulu),
                 score >= 30 ? 3 : 1, score, Math.abs(score) / 2);
+    }
+
+    private MatchContext.ContextFrame quietFrame(int seconds) {
+        var dragon = new MatchContext.PlayerContext(3, "dragonDriver", component(100), component(100), component(20),
+                0, EVEN);
+        var frontdoor = new MatchContext.PlayerContext(1, "Frontdoor", component(100), component(100), component(20),
+                0, EVEN);
+        return new MatchContext.ContextFrame(Duration.ofSeconds(seconds), List.of(frontdoor, dragon), null, 0, 0);
     }
 
     private MatchContext.Component component(double value) {

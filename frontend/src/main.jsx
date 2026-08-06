@@ -79,18 +79,35 @@ function Report({ analysis, focusPlayer, setFocusPlayer, rebuild, loading, onDow
 }
 
 function NarrativeAnalysisSection({ narrative }) {
-  const [selectedFocusId, setSelectedFocusId] = useState(narrative?.evidence?.focuses?.[0]?.id || '');
+  const [selectedIntervalId, setSelectedIntervalId] = useState('');
   const [hoverAt, setHoverAt] = useState(null);
   if (!narrative) return null;
-  const phases = narrative.timeline?.phases || [];
+  const matchFlow = narrative.matchFlow;
+  const intervals = matchFlow?.intervals?.length ? matchFlow.intervals : (narrative.timeline?.phases || []).map(phase => ({
+    id: phase.id,
+    kind: phase.kind,
+    title: phase.title,
+    startedAt: phase.startedAt,
+    endedAt: phase.endedAt,
+    confidence: phase.confidence,
+    completeness: 'PARTIAL',
+    summary: phase.summary,
+    drilldown: null,
+  }));
   const evidence = narrative.evidence || {};
   const focuses = evidence.focuses || [];
-  const selected = focuses.find(focus => focus.id === selectedFocusId) || focuses[0];
+  const selectedInterval = intervals.find(interval => interval.id === selectedIntervalId) || null;
+  const selectedRange = selectedInterval ? { id: selectedInterval.id, from: selectedInterval.startedAt, to: selectedInterval.endedAt } : null;
   const metrics = evidence.metricComparisons?.length
     ? evidence.metricComparisons
     : legacyMetricComparisons(withOverallScoreSeries(narrative.chart, narrative.timeline?.snapshots || []), narrative);
   const participants = evidence.participants || [];
   const team = (narrative.focusTeamPlayers || []).join(', ') || '—';
+  const selectIntervalAt = at => {
+    const seconds = durationSeconds(at);
+    const interval = intervals.find(item => seconds >= durationSeconds(item.startedAt) && seconds < durationSeconds(item.endedAt));
+    if (interval) setSelectedIntervalId(interval.id);
+  };
 
   return <section className="report-section"><span className="section-number">01</span><div className="wide">
     <h2>Ход матча</h2>
@@ -98,16 +115,18 @@ function NarrativeAnalysisSection({ narrative }) {
       <p className="lead">Официальный результат для {narrative.focusPlayer || 'игрока'}: <strong>{narrative.officialReplayResult || 'не определён'}</strong>.</p>
       <dl className="summary-facts"><dt>Команда</dt><dd>{team}</dd></dl>
     </div>
-    <div className="phase-list">{phases.map(phase => {
-      const focus = focuses.find(item => item.sourceId === phase.id);
-      return <button className={focus?.id === selected?.id ? 'phase selected' : 'phase'} key={phase.id} onClick={() => setSelectedFocusId(focus?.id || '')}>
-      <time>{clock(durationSeconds(phase.startedAt))}–{clock(durationSeconds(phase.endedAt))}</time>
-      <strong>{phase.title}</strong>
-      <span>{phase.summary}</span>
+    <div className="phase-list">{intervals.map(interval => {
+      const selected = interval.id === selectedInterval?.id;
+      return <button className={selected ? 'phase selected' : 'phase'} key={interval.id} onClick={() => setSelectedIntervalId(selected ? '' : interval.id)}>
+      <time>{clock(durationSeconds(interval.startedAt))}–{clock(durationSeconds(interval.endedAt))}</time>
+      <strong>{interval.title}</strong>
+      <span>{interval.summary}</span>
+      <small>{kindText(interval.kind)} · {interval.completeness || '—'} · {Math.round((interval.confidence || 0) * 100)}%</small>
     </button>;
     })}</div>
     <div className="evidence-legend">{participants.map((participant, index) => <span className={`legend-item ${participant.relationship?.toLowerCase() || 'unknown'}`} key={participant.id}><i style={{ background: participantColor(index) }} />{participant.displayName}<small>{relationshipText(participant)}</small></span>)}</div>
-    <div className="charts-stack">{metrics.map(metric => <MetricComparisonChart key={metric.id} metric={metric} participants={participants} focuses={focuses} selected={selected} hoverAt={hoverAt} onHover={setHoverAt} onFocus={setSelectedFocusId} />)}</div>
+    <div className="charts-stack">{metrics.map(metric => <MetricComparisonChart key={metric.id} metric={metric} participants={participants} focuses={focuses} selected={selectedRange} hoverAt={hoverAt} onHover={setHoverAt} onFocusAt={selectIntervalAt} />)}</div>
+    <IntervalDrilldown interval={selectedInterval} />
   </div></section>;
 }
 
@@ -135,7 +154,7 @@ function withOverallScoreSeries(chart, snapshots) {
   return { ...chart, series: [...existing, { id: 'overallScore', label: 'Общее преимущество', unit: 'баллы', points }] };
 }
 
-function MetricComparisonChart({ metric, participants, focuses, selected, hoverAt, onHover, onFocus }) {
+function MetricComparisonChart({ metric, participants, focuses, selected, hoverAt, onHover, onFocusAt }) {
   const visibleSeries = metric.series || [];
   const participantById = new Map((participants || []).map((participant, index) => [participant.id, { ...participant, color: participantColor(index) }]));
   const allPoints = visibleSeries.flatMap(series => series.points || []);
@@ -189,15 +208,61 @@ function MetricComparisonChart({ metric, participants, focuses, selected, hoverA
         <line className="axis-line" x1={left} x2={width - right} y1={height - bottom} y2={height - bottom} />
         {visibleSeries.map(series => {
           const participant = participantById.get(series.participantId) || {};
-          return <polyline key={series.id} fill="none" stroke={participant.color || '#dbe7f5'} strokeWidth={series.strokeWeight || 2} strokeLinejoin="round" strokeLinecap="round" strokeDasharray={dash(series.lineStyle)} points={(series.points || []).map(point => `${x(point.at)},${y(point.value)}`).join(' ')} />;
+          const points = series.points || [];
+          const clipped = selected ? clippedPoints(points, selected.from, selected.to) : points;
+          return <g key={series.id}>
+            <polyline className={selected ? 'series-line muted-range' : 'series-line'} fill="none" stroke={selected ? '#9aa8b8' : participant.color || '#dbe7f5'} strokeWidth={selected ? Math.max(1.5, (series.strokeWeight || 2) - 1) : series.strokeWeight || 2} strokeLinejoin="round" strokeLinecap="round" strokeDasharray={dash(series.lineStyle)} points={points.map(point => `${x(point.at)},${y(point.value)}`).join(' ')} />
+            {selected && clipped.length > 1 && <polyline className="series-line active-range" fill="none" stroke={participant.color || '#dbe7f5'} strokeWidth={Math.max(4, series.strokeWeight || 2)} strokeLinejoin="round" strokeLinecap="round" strokeDasharray={dash(series.lineStyle)} points={clipped.map(point => `${x(point.at)},${y(point.value)}`).join(' ')} />}
+          </g>;
         })}
-        {focuses.filter(focus => focus.kind === 'COMBAT' || focus.kind === 'TURNING_POINT').map(focus => <line key={focus.id} className={focus.id === selected?.id ? 'marker-line active' : 'marker-line'} x1={x(focus.at)} x2={x(focus.at)} y1={top} y2={height - bottom} onClick={() => onFocus(focus.id)} />)}
+        {focuses.filter(focus => focus.kind === 'COMBAT' || focus.kind === 'TURNING_POINT').map(focus => <line key={focus.id} className="marker-line" x1={x(focus.at)} x2={x(focus.at)} y1={top} y2={height - bottom} onClick={() => onFocusAt(focus.at)} />)}
         {hoverX != null && hoverX >= left && hoverX <= width - right && <g><line className="crosshair-line" x1={hoverX} x2={hoverX} y1={top} y2={height - bottom} /><text className="axis-label crosshair-label" x={hoverX + 8} y={top + 16}>{clock(hoverAt)}</text></g>}
         <text className="axis-title" x={18} y={top + plotHeight / 2} transform={`rotate(-90 18 ${top + plotHeight / 2})`} textAnchor="middle">{metric.unit || metric.label}</text>
         <text className="axis-title" x={left + plotWidth / 2} y={height - 6} textAnchor="middle">Время матча</text>
       </svg>
     </div>
   </section>;
+}
+
+function clippedPoints(points, from, to) {
+  const start = durationSeconds(from);
+  const end = durationSeconds(to);
+  const ordered = [...(points || [])].sort((left, right) => durationSeconds(left.at) - durationSeconds(right.at));
+  if (!ordered.length || end <= start) return [];
+  const result = [];
+  for (let index = 0; index < ordered.length - 1; index++) {
+    const left = ordered[index];
+    const right = ordered[index + 1];
+    const leftAt = durationSeconds(left.at);
+    const rightAt = durationSeconds(right.at);
+    if (rightAt < start || leftAt > end || rightAt === leftAt) continue;
+    const segmentStart = Math.max(start, leftAt);
+    const segmentEnd = Math.min(end, rightAt);
+    if (segmentEnd < segmentStart) continue;
+    pushUniquePoint(result, interpolatePoint(left, right, segmentStart));
+    pushUniquePoint(result, interpolatePoint(left, right, segmentEnd));
+  }
+  for (const point of ordered) {
+    const at = durationSeconds(point.at);
+    if (at >= start && at <= end) pushUniquePoint(result, point);
+  }
+  return result.sort((left, right) => durationSeconds(left.at) - durationSeconds(right.at));
+}
+
+function interpolatePoint(left, right, at) {
+  const leftAt = durationSeconds(left.at);
+  const rightAt = durationSeconds(right.at);
+  const ratio = rightAt === leftAt ? 0 : (at - leftAt) / (rightAt - leftAt);
+  return {
+    at,
+    value: Number(left.value || 0) + (Number(right.value || 0) - Number(left.value || 0)) * ratio,
+  };
+}
+
+function pushUniquePoint(points, point) {
+  const at = durationSeconds(point.at);
+  const existing = points.find(item => Math.abs(durationSeconds(item.at) - at) < 0.001);
+  if (!existing) points.push(point);
 }
 
 function formatAxisValue(value) {
@@ -269,6 +334,108 @@ function UnitEvidenceTable({ rows, caption }) {
 function countEvidence(value) {
   if (!value || value.value == null) return 'нет данных';
   return value.value;
+}
+
+function IntervalDrilldown({ interval }) {
+  if (!interval) return <section className="interval-drilldown">
+    <p className="muted">Выберите интервал, чтобы увидеть только его боевую и экономическую расшифровку.</p>
+  </section>;
+  const drilldown = interval.drilldown || {};
+  return <section className="interval-drilldown">
+    <header>
+      <h3>{interval.title}</h3>
+      <span>{clock(durationSeconds(interval.startedAt))}–{clock(durationSeconds(interval.endedAt))}</span>
+    </header>
+    <div className="drilldown-grid">
+      <section className="drilldown-section">
+        <h4>Бои</h4>
+        <CombatDrilldown combat={drilldown.combat} />
+      </section>
+      <section className="drilldown-section">
+        <h4>Экономика и развитие</h4>
+        <DevelopmentDrilldown development={drilldown.development} />
+      </section>
+    </div>
+    {[...(drilldown.limitations || []), ...(interval.limitations || [])].length > 0 && <ul className="limitations">{[...(drilldown.limitations || []), ...(interval.limitations || [])].map(item => <li key={item}>{item}</li>)}</ul>}
+  </section>;
+}
+
+function CombatDrilldown({ combat }) {
+  if (!combat) return <p className="muted">Боевых данных для интервала нет.</p>;
+  if ((combat.combats || []).length) {
+    return <div className="combat-list">{combat.combats.map(item => <section className="combat-block compact" key={item.id}>
+      <div className="combat-title"><time>{clock(durationSeconds(item.startedAt))}</time><div><h3>{item.label}</h3><p>{clock(durationSeconds(item.startedAt))}–{clock(durationSeconds(item.endedAt))}</p></div></div>
+      <CombatEvidenceTable evidence={item} />
+    </section>)}</div>;
+  }
+  return <EmptyState items={combat.emptyStates} fallback="Боёв в этом интервале не обнаружено." />;
+}
+
+function DevelopmentDrilldown({ development }) {
+  if (!development) return <p className="muted">Данных по развитию для интервала нет.</p>;
+  const rows = development.macro?.metrics || [];
+  const production = development.production?.observations || [];
+  const tech = development.tech?.observations || [];
+  const scouting = development.scouting?.observations || [];
+  const preparation = development.preparation?.observations || [];
+  const hasEvidence = rows.length || production.length || tech.length || scouting.length || preparation.length;
+  if (!hasEvidence) {
+    return <EmptyState items={development.emptyStates} fallback="Экономических или технологических событий в этом интервале не обнаружено." />;
+  }
+  return <div className="development-evidence">
+    {rows.length > 0 && <table className="development-table">
+      <thead><tr><th>Метрика</th><th>Старт</th><th>Финиш</th><th>Δ</th></tr></thead>
+      <tbody>{rows.map(row => <tr key={row.metric}>
+        <th scope="row">{metricText(row.metric)}</th>
+        <td>{Math.round(row.startValue || 0)}</td>
+        <td>{Math.round(row.endValue || 0)}</td>
+        <td>{formatDelta(row.delta)}</td>
+      </tr>)}</tbody>
+    </table>}
+    <ObservationList title="Производство" items={production} />
+    <ObservationList title="Технологии" items={tech} />
+    <ObservationList title="Разведка" items={scouting} />
+    <ObservationList title="Подготовка" items={preparation} />
+    {(development.limitations || []).length > 0 && <ul className="limitations compact-list">{development.limitations.map(item => <li key={item}>{item}</li>)}</ul>}
+  </div>;
+}
+
+function EmptyState({ items, fallback }) {
+  const values = (items || []).length ? items : [fallback];
+  return <div className="empty-state">{values.map(item => <p key={item}>{item}</p>)}</div>;
+}
+
+function ObservationList({ title, items }) {
+  if (!(items || []).length) return null;
+  return <div className="observation-list"><h5>{title}</h5><ul>{items.map(item => <li key={item}>{item}</li>)}</ul></div>;
+}
+
+function metricText(metric) {
+  return {
+    armyValue: 'Стоимость армии',
+    economyProxy: 'Экономика',
+    supplyUsed: 'Занятый лимит',
+  }[metric] || metric;
+}
+
+function formatDelta(value) {
+  const rounded = Math.round(Number(value || 0));
+  return rounded > 0 ? `+${rounded}` : String(rounded);
+}
+
+function kindText(kind) {
+  return {
+    OPENING_BUILDUP: 'открытие',
+    ECONOMIC_GROWTH: 'экономика',
+    TECH_TRANSITION: 'технологии',
+    ARMY_BUILDUP: 'армия',
+    MAP_CONTROL_OR_SCOUTING: 'карта/разведка',
+    PRESSURE_PREPARATION: 'подготовка',
+    COMBAT: 'бой',
+    RECOVERY: 'восстановление',
+    REGROUPING_OR_LOW_ACTIVITY: 'перегруппировка',
+    LOW_EVIDENCE: 'низкая доказательность',
+  }[kind] || 'интервал';
 }
 
 function participantColor(index) {
